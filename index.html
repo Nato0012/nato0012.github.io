@@ -1,44 +1,209 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Simple Clicker Game</title>
+    <title>Web Chess Game</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css">
     <style>
         body {
             font-family: Arial, sans-serif;
-            text-align: center;
-            margin-top: 50px;
-        }
-        #game {
+            max-width: 800px;
             margin: 0 auto;
-            width: 300px;
-            border: 2px solid #333;
             padding: 20px;
-            border-radius: 10px;
-            background-color: #f0f0f0;
+        }
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        #board {
+            width: 400px;
+            height: 400px;
+        }
+        #game-info {
+            width: 100%;
+            text-align: center;
+        }
+        #controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
         }
         button {
-            padding: 10px 20px;
-            font-size: 16px;
+            padding: 8px 16px;
             cursor: pointer;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 5px;
+        }
+        #pgn {
+            width: 100%;
+            height: 100px;
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
-    <div id="game">
-        <h1>Clicker Game</h1>
-        <p>Score: <span id="score">0</span></p>
-        <button onclick="clickButton()">Click Me!</button>
+    <div id="game-container">
+        <h1>Chess Game</h1>
+        <div id="board"></div>
+        <div id="game-info">
+            <p id="status">White's turn</p>
+            <p id="last-move"></p>
+        </div>
+        <div id="controls">
+            <button id="resign">Resign</button>
+            <button id="new-game">New Game</button>
+            <select id="game-type">
+                <option value="pvp">Player vs Player</option>
+                <option value="pve" selected>Player vs Computer</option>
+            </select>
+            <select id="elo">
+                <option value="800">Easy (800 ELO)</option>
+                <option value="1500" selected>Medium (1500 ELO)</option>
+                <option value="2000">Hard (2000 ELO)</option>
+            </select>
+        </div>
+        <textarea id="pgn" readonly></textarea>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.0.0-beta.3/chess.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/14.1.0/stockfish.min.js"></script>
+    
     <script>
-        let score = 0;
-        function clickButton() {
-            score++;
-            document.getElementById("score").innerHTML = score;
+        // Initialize game components
+        const game = new Chess();
+        const board = Chessboard('board', {
+            position: 'start',
+            draggable: true,
+            onDrop: handleMove,
+            onSnapEnd: () => board.position(game.fen())
+        });
+        
+        const statusEl = document.getElementById('status');
+        const lastMoveEl = document.getElementById('last-move');
+        const pgnEl = document.getElementById('pgn');
+        const resignBtn = document.getElementById('resign');
+        const newGameBtn = document.getElementById('new-game');
+        const gameTypeSelect = document.getElementById('game-type');
+        const eloSelect = document.getElementById('elo');
+        
+        let gameActive = false;
+        let gameResult = '';
+        let stockfish = new Worker('stockfish.js');
+        let stockfishLevel = 1500;
+        
+        // Initialize Stockfish
+        stockfish.onmessage = (event) => {
+            if (event.data?.startsWith('bestmove')) {
+                const move = event.data.split(' ')[1];
+                if (move && move !== '(none)') {
+                    setTimeout(() => {
+                        game.move(move);
+                        board.position(game.fen());
+                        updateStatus();
+                        if (game.isGameOver()) endGame();
+                    }, 500);
+                }
+            }
+        };
+        
+        stockfish.postMessage('uci');
+        stockfish.postMessage('setoption name Skill Level value ' + stockfishLevel);
+        
+        // Event listeners
+        resignBtn.addEventListener('click', resign);
+        newGameBtn.addEventListener('click', startNewGame);
+        gameTypeSelect.addEventListener('change', updateGameSettings);
+        eloSelect.addEventListener('change', updateGameSettings);
+        
+        // Start initial game
+        startNewGame();
+        
+        // Game functions
+        function startNewGame() {
+            game.reset();
+            board.position(game.fen());
+            gameActive = true;
+            gameResult = '';
+            updateStatus();
+            pgnEl.value = '';
+            lastMoveEl.textContent = '';
+            
+            if (gameTypeSelect.value === 'pve' && game.turn() === 'b') {
+                makeStockfishMove();
+            }
+        }
+        
+        function handleMove(source, target) {
+            if (!gameActive) return false;
+            
+            // Human move
+            const move = game.move({
+                from: source,
+                to: target,
+                promotion: 'q' // Always promote to queen for simplicity
+            });
+            
+            if (move === null) return 'snapback';
+            
+            updateStatus();
+            lastMoveEl.textContent = `Last move: ${game.pgn().split('\n').pop()}`;
+            
+            if (game.isGameOver()) {
+                endGame();
+                return true;
+            }
+            
+            // If PvE and computer's turn
+            if (gameTypeSelect.value === 'pve' && game.turn() === 'b') {
+                setTimeout(makeStockfishMove, 500);
+            }
+            
+            return true;
+        }
+        
+        function makeStockfishMove() {
+            if (!gameActive || game.isGameOver()) return;
+            
+            stockfish.postMessage('position fen ' + game.fen());
+            stockfish.postMessage('go depth 10');
+        }
+        
+        function updateStatus() {
+            if (game.isCheckmate()) {
+                statusEl.textContent = `Checkmate! ${game.turn() === 'w' ? 'Black' : 'White'} wins!`;
+            } else if (game.isDraw()) {
+                statusEl.textContent = "Game ended in a draw!";
+            } else if (game.isCheck()) {
+                statusEl.textContent = `${game.turn() === 'w' ? 'White' : 'Black'} is in check!`;
+            } else {
+                statusEl.textContent = `${game.turn() === 'w' ? 'White' : 'Black'}'s turn`;
+            }
+            
+            // Update PGN
+            pgnEl.value = game.pgn();
+        }
+        
+        function endGame() {
+            gameActive = false;
+            if (game.isCheckmate()) {
+                gameResult = `Checkmate - ${game.turn() === 'w' ? 'Black' : 'White'} wins`;
+            } else if (game.isDraw()) {
+                gameResult = "Draw";
+            }
+            updateStatus();
+        }
+        
+        function resign() {
+            if (!gameActive) return;
+            
+            gameResult = `${game.turn() === 'w' ? 'White' : 'Black'} resigned`;
+            statusEl.textContent = gameResult;
+            gameActive = false;
+        }
+        
+        function updateGameSettings() {
+            stockfishLevel = parseInt(eloSelect.value);
+            stockfish.postMessage('setoption name Skill Level value ' + stockfishLevel);
         }
     </script>
 </body>
