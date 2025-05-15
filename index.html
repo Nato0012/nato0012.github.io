@@ -138,26 +138,32 @@
     </style>
 </head>
 <body>
-    <div class="stamina-display">
-        Stamina: <span id="stamina">10</span>
-    </div>
+    <!-- Background overlay for readability -->
+    <div class="background-overlay"></div>
+    
+    <!-- Main content container -->
+    <div class="content-container">
+        <div class="stamina-display">
+            Stamina: <span id="stamina">10</span>
+        </div>
 
-    <h1>🤝 Political Donor Management</h1>
-    
-    <div class="party-tabs">
-        <div class="party-tab active" onclick="switchParty('Democrat')">Democrat Donors</div>
-        <div class="party-tab" onclick="switchParty('Republican')">Republican Donors</div>
-    </div>
-    
-    <div id="donor-container" class="donor-grid">
-        <!-- Donor cards will be inserted here by JavaScript -->
-    </div>
-    
-    <div id="result-modal" class="modal">
-        <div class="modal-content">
-            <h2 id="modal-title">Result</h2>
-            <p id="modal-message">This is a message</p>
-            <button onclick="closeModal()">Close</button>
+        <h1>🤝 Political Donor Management</h1>
+        
+        <div class="party-tabs">
+            <div class="party-tab active" onclick="switchParty('Democrat')">Democrat Donors</div>
+            <div class="party-tab" onclick="switchParty('Republican')">Republican Donors</div>
+        </div>
+        
+        <div id="donor-container" class="donor-grid">
+            <!-- Donor cards will be inserted here by JavaScript -->
+        </div>
+        
+        <div id="result-modal" class="modal">
+            <div class="modal-content">
+                <h2 id="modal-title">Result</h2>
+                <p id="modal-message">This is a message</p>
+                <button onclick="closeModal()">Close</button>
+            </div>
         </div>
     </div>
 
