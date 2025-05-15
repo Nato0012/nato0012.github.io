@@ -1,209 +1,332 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Web Chess Game</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Political Donor Management</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
+            background-color: #f5f5f5;
         }
-        #game-container {
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .party-tabs {
             display: flex;
-            flex-direction: column;
-            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .party-tab {
+            padding: 10px 20px;
+            margin: 0 10px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .party-tab.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .donor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 20px;
         }
-        #board {
-            width: 400px;
-            height: 400px;
+        .donor-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            overflow: hidden;
         }
-        #game-info {
+        .donor-image {
             width: 100%;
-            text-align: center;
+            height: 200px;
+            object-fit: cover;
         }
-        #controls {
+        .donor-info {
+            padding: 15px;
+        }
+        .donor-name {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .donor-type {
+            color: #666;
+            font-style: italic;
+            margin-bottom: 10px;
+        }
+        .donor-stats {
+            margin-bottom: 10px;
+        }
+        .donor-likes {
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+        .donor-buttons {
             display: flex;
             gap: 10px;
-            justify-content: center;
         }
-        button {
-            padding: 8px 16px;
+        .btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
             cursor: pointer;
+            font-weight: bold;
+            flex: 1;
         }
-        #pgn {
+        .btn-court {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .btn-attack {
+            background-color: #f44336;
+            color: white;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
-            height: 100px;
-            margin-top: 20px;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            max-width: 400px;
+        }
+        .stamina-display {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #333;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
-    <div id="game-container">
-        <h1>Chess Game</h1>
-        <div id="board"></div>
-        <div id="game-info">
-            <p id="status">White's turn</p>
-            <p id="last-move"></p>
-        </div>
-        <div id="controls">
-            <button id="resign">Resign</button>
-            <button id="new-game">New Game</button>
-            <select id="game-type">
-                <option value="pvp">Player vs Player</option>
-                <option value="pve" selected>Player vs Computer</option>
-            </select>
-            <select id="elo">
-                <option value="800">Easy (800 ELO)</option>
-                <option value="1500" selected>Medium (1500 ELO)</option>
-                <option value="2000">Hard (2000 ELO)</option>
-            </select>
-        </div>
-        <textarea id="pgn" readonly></textarea>
+    <div class="stamina-display">
+        Stamina: <span id="stamina">10</span>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.0.0-beta.3/chess.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/14.1.0/stockfish.min.js"></script>
+    <h1>🤝 Political Donor Management</h1>
     
+    <div class="party-tabs">
+        <div class="party-tab active" onclick="switchParty('Democrat')">Democrat Donors</div>
+        <div class="party-tab" onclick="switchParty('Republican')">Republican Donors</div>
+    </div>
+    
+    <div id="donor-container" class="donor-grid">
+        <!-- Donor cards will be inserted here by JavaScript -->
+    </div>
+    
+    <div id="result-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="modal-title">Result</h2>
+            <p id="modal-message">This is a message</p>
+            <button onclick="closeModal()">Close</button>
+        </div>
+    </div>
+
     <script>
-        // Initialize game components
-        const game = new Chess();
-        const board = Chessboard('board', {
-            position: 'start',
-            draggable: true,
-            onDrop: handleMove,
-            onSnapEnd: () => board.position(game.fen())
-        });
-        
-        const statusEl = document.getElementById('status');
-        const lastMoveEl = document.getElementById('last-move');
-        const pgnEl = document.getElementById('pgn');
-        const resignBtn = document.getElementById('resign');
-        const newGameBtn = document.getElementById('new-game');
-        const gameTypeSelect = document.getElementById('game-type');
-        const eloSelect = document.getElementById('elo');
-        
-        let gameActive = false;
-        let gameResult = '';
-        let stockfish = new Worker('stockfish.js');
-        let stockfishLevel = 1500;
-        
-        // Initialize Stockfish
-        stockfish.onmessage = (event) => {
-            if (event.data?.startsWith('bestmove')) {
-                const move = event.data.split(' ')[1];
-                if (move && move !== '(none)') {
-                    setTimeout(() => {
-                        game.move(move);
-                        board.position(game.fen());
-                        updateStatus();
-                        if (game.isGameOver()) endGame();
-                    }, 500);
-                }
+        // Sample data - in a real app, this would come from your backend
+        const donorData = {
+            "donors": {
+                "Democrat": [
+                    {
+                        "name": "Tech Titan",
+                        "type": "Silicon Valley Executive",
+                        "relationship": 75,
+                        "loves": ["Green Energy", "Tech Regulation"],
+                        "hates": ["Tax Increases", "Antitrust Laws"],
+                        "image": "https://example.com/tech-exec.jpg"
+                    },
+                    {
+                        "name": "Union Leader",
+                        "type": "Labor Organizer",
+                        "relationship": 60,
+                        "loves": ["Worker Rights", "Minimum Wage"],
+                        "hates": ["Right-to-Work", "Corporate Tax Cuts"],
+                        "image": "https://example.com/union-leader.jpg"
+                    },
+                    {
+                        "name": "Hollywood Mogul",
+                        "type": "Entertainment Executive",
+                        "relationship": 45,
+                        "loves": ["Arts Funding", "Copyright Laws"],
+                        "hates": ["Censorship", "Streaming Regulation"],
+                        "image": "https://example.com/hollywood.jpg"
+                    }
+                ],
+                "Republican": [
+                    {
+                        "name": "Oil Baron",
+                        "type": "Energy Executive",
+                        "relationship": 80,
+                        "loves": ["Deregulation", "Drilling Rights"],
+                        "hates": ["Carbon Taxes", "Renewable Subsidies"],
+                        "image": "https://example.com/oil-exec.jpg"
+                    },
+                    {
+                        "name": "Wall Street Tycoon",
+                        "type": "Investment Banker",
+                        "relationship": 70,
+                        "loves": ["Tax Cuts", "Deregulation"],
+                        "hates": ["Financial Reform", "Wealth Taxes"],
+                        "image": "https://example.com/banker.jpg"
+                    },
+                    {
+                        "name": "Defense Contractor",
+                        "type": "Military Industrialist",
+                        "relationship": 55,
+                        "loves": ["Defense Spending", "Foreign Interventions"],
+                        "hates": ["Budget Cuts", "Peace Treaties"],
+                        "image": "https://example.com/defense-contractor.jpg"
+                    }
+                ]
             }
         };
+
+        // Player state
+        let currentParty = "Democrat";
+        let stamina = 10;
         
-        stockfish.postMessage('uci');
-        stockfish.postMessage('setoption name Skill Level value ' + stockfishLevel);
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            renderDonors(currentParty);
+            updateStaminaDisplay();
+        });
         
-        // Event listeners
-        resignBtn.addEventListener('click', resign);
-        newGameBtn.addEventListener('click', startNewGame);
-        gameTypeSelect.addEventListener('change', updateGameSettings);
-        eloSelect.addEventListener('change', updateGameSettings);
-        
-        // Start initial game
-        startNewGame();
-        
-        // Game functions
-        function startNewGame() {
-            game.reset();
-            board.position(game.fen());
-            gameActive = true;
-            gameResult = '';
-            updateStatus();
-            pgnEl.value = '';
-            lastMoveEl.textContent = '';
+        // Switch between Democrat and Republican donors
+        function switchParty(party) {
+            currentParty = party;
+            renderDonors(party);
             
-            if (gameTypeSelect.value === 'pve' && game.turn() === 'b') {
-                makeStockfishMove();
-            }
-        }
-        
-        function handleMove(source, target) {
-            if (!gameActive) return false;
-            
-            // Human move
-            const move = game.move({
-                from: source,
-                to: target,
-                promotion: 'q' // Always promote to queen for simplicity
+            // Update tab styles
+            document.querySelectorAll('.party-tab').forEach(tab => {
+                tab.classList.remove('active');
             });
-            
-            if (move === null) return 'snapback';
-            
-            updateStatus();
-            lastMoveEl.textContent = `Last move: ${game.pgn().split('\n').pop()}`;
-            
-            if (game.isGameOver()) {
-                endGame();
-                return true;
-            }
-            
-            // If PvE and computer's turn
-            if (gameTypeSelect.value === 'pve' && game.turn() === 'b') {
-                setTimeout(makeStockfishMove, 500);
-            }
-            
-            return true;
+            document.querySelector(`.party-tab:nth-child(${party === 'Democrat' ? 1 : 2})`).classList.add('active');
         }
         
-        function makeStockfishMove() {
-            if (!gameActive || game.isGameOver()) return;
+        // Render donor cards for the selected party
+        function renderDonors(party) {
+            const container = document.getElementById('donor-container');
+            container.innerHTML = '';
             
-            stockfish.postMessage('position fen ' + game.fen());
-            stockfish.postMessage('go depth 10');
+            donorData.donors[party].forEach(donor => {
+                const hourly = Math.floor(500 * (1 + (donor.relationship / 10)));
+                
+                const card = document.createElement('div');
+                card.className = 'donor-card';
+                card.innerHTML = `
+                    <img src="${donor.image}" alt="${donor.name}" class="donor-image" onerror="this.src='https://via.placeholder.com/300x200?text=Donor+Image'">
+                    <div class="donor-info">
+                        <div class="donor-name">${donor.name}</div>
+                        <div class="donor-type">${donor.type}</div>
+                        <div class="donor-stats">
+                            Relationship: ${donor.relationship}/100<br>
+                            Hourly Donation: $${hourly.toLocaleString()}
+                        </div>
+                        <div class="donor-likes">
+                            <strong>Loves:</strong> ${donor.loves.join(', ')}<br>
+                            <strong>Hates:</strong> ${donor.hates.join(', ')}
+                        </div>
+                        <div class="donor-buttons">
+                            <button class="btn btn-court" onclick="courtDonor('${party}', '${donor.name}')">Court (+1 Stamina)</button>
+                            <button class="btn btn-attack" onclick="attackDonor('${party}', '${donor.name}')">Attack (-2 Stamina)</button>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
         }
         
-        function updateStatus() {
-            if (game.isCheckmate()) {
-                statusEl.textContent = `Checkmate! ${game.turn() === 'w' ? 'Black' : 'White'} wins!`;
-            } else if (game.isDraw()) {
-                statusEl.textContent = "Game ended in a draw!";
-            } else if (game.isCheck()) {
-                statusEl.textContent = `${game.turn() === 'w' ? 'White' : 'Black'} is in check!`;
+        // Court a donor (improve relationship)
+        function courtDonor(party, donorName) {
+            if (stamina < 1) {
+                showModal("Not Enough Stamina", "❌ You don't have enough stamina! (Need 1)");
+                return;
+            }
+            
+            const donor = donorData.donors[party].find(d => d.name === donorName);
+            const successRate = 50 + Math.floor(donor.relationship / 2);
+            const roll = Math.floor(Math.random() * 100) + 1;
+            
+            if (roll <= successRate) {
+                const gain = 10;
+                donor.relationship = Math.min(100, donor.relationship + gain);
+                stamina -= 1;
+                updateStaminaDisplay();
+                showModal("Success!", `🎩 Success! ${donor.name}'s relationship +${gain}`);
             } else {
-                statusEl.textContent = `${game.turn() === 'w' ? 'White' : 'Black'}'s turn`;
+                stamina -= 1;
+                updateStaminaDisplay();
+                showModal("Rejected", `💔 ${donor.name} rejected your advances!`);
             }
             
-            // Update PGN
-            pgnEl.value = game.pgn();
+            // Re-render to show updated relationship
+            renderDonors(currentParty);
         }
         
-        function endGame() {
-            gameActive = false;
-            if (game.isCheckmate()) {
-                gameResult = `Checkmate - ${game.turn() === 'w' ? 'Black' : 'White'} wins`;
-            } else if (game.isDraw()) {
-                gameResult = "Draw";
+        // Attack a donor (damage relationship)
+        function attackDonor(party, donorName) {
+            if (stamina < 2) {
+                showModal("Not Enough Stamina", "❌ You don't have enough stamina! (Need 2)");
+                return;
             }
-            updateStatus();
-        }
-        
-        function resign() {
-            if (!gameActive) return;
             
-            gameResult = `${game.turn() === 'w' ? 'White' : 'Black'} resigned`;
-            statusEl.textContent = gameResult;
-            gameActive = false;
+            const donor = donorData.donors[party].find(d => d.name === donorName);
+            const successRate = 50;
+            const roll = Math.floor(Math.random() * 100) + 1;
+            
+            if (roll <= successRate) {
+                const loss = 5;
+                donor.relationship = Math.max(0, donor.relationship - loss);
+                stamina -= 2;
+                updateStaminaDisplay();
+                showModal("Success!", `💥 Success! ${donor.name}'s relationship -${loss}`);
+            } else {
+                stamina -= 2;
+                updateStaminaDisplay();
+                showModal("Resisted", `🛡️ ${donor.name} resisted your attack!`);
+            }
+            
+            // Re-render to show updated relationship
+            renderDonors(currentParty);
         }
         
-        function updateGameSettings() {
-            stockfishLevel = parseInt(eloSelect.value);
-            stockfish.postMessage('setoption name Skill Level value ' + stockfishLevel);
+        // Show modal with result message
+        function showModal(title, message) {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-message').innerHTML = message;
+            document.getElementById('result-modal').style.display = 'flex';
+        }
+        
+        // Close modal
+        function closeModal() {
+            document.getElementById('result-modal').style.display = 'none';
+        }
+        
+        // Update stamina display
+        function updateStaminaDisplay() {
+            document.getElementById('stamina').textContent = stamina;
         }
     </script>
 </body>
