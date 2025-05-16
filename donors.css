@@ -5,6 +5,7 @@
         }
         .party-tab {
             padding: 10px 20px;
+            width: 160px;
             margin: 0 10px;
             cursor: pointer;
             border-radius: 5px;
