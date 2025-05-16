@@ -11,6 +11,7 @@
             border-radius: 5px;
             font-weight: bold;
             justify-content: center;
+            text-align: center
         }
         .party-tab.active {
             background-color: #4CAF50;
