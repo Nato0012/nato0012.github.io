@@ -10,6 +10,7 @@
             cursor: pointer;
             border-radius: 5px;
             font-weight: bold;
+            justify-content: center;
         }
         .party-tab.active {
             background-color: #4CAF50;
