@@ -4,6 +4,7 @@
             margin-bottom: 20px;
         }
         .party-tab {
+            display: flex;
             padding: 10px 20px;
             width: 160px;
             margin: 0 10px;
@@ -11,7 +12,7 @@
             border-radius: 5px;
             font-weight: bold;
             justify-content: center;
-            text-align: center
+            text-align: center;
         }
         .party-tab.active {
             background-color: #4CAF50;
