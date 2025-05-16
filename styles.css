@@ -1,3 +1,4 @@
+/* === Global Styles (applied everywhere) === */
 body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   max-width: 1200px;
@@ -33,37 +34,4 @@ h1 {
   padding: 10px 15px;
   border-radius: 5px;
   font-weight: bold;
-}
-
-/* === Page-Specific Styles (for donor management) === */
-.party-tabs {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 20px;
-}
-
-.party-tab {
-  padding: 10px 20px;
-  margin: 0 10px;
-  cursor: pointer;
-  border-radius: 5px;
-  font-weight: bold;
-}
-
-.party-tab.active {
-  background-color: #4CAF50;
-  color: white;
-}
-
-.donor-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
-}
-
-.donor-card {
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-  overflow: hidden;
 }
