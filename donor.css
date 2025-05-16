@@ -1,1 +1,92 @@
-
+        }
+        .party-tabs {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .party-tab {
+            padding: 10px 20px;
+            margin: 0 10px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .party-tab.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .donor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .donor-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .donor-image {
+            width: 100%;
+            height: 300px;
+            object-fit: cover;
+        }
+        .donor-info {
+            padding: 15px;
+        }
+        .donor-name {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .donor-type {
+            color: #666;
+            font-style: italic;
+            margin-bottom: 10px;
+        }
+        .donor-stats {
+            margin-bottom: 10px;
+        }
+        .donor-likes {
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+        .donor-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            flex: 1;
+        }
+        .btn-court {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .btn-attack {
+            background-color: #f44336;
+            color: white;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            max-width: 400px;
+        }
