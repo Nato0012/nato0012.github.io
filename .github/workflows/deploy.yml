@@ -1,0 +1,28 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ "main" ]  # Runs on pushes to main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Checkout code
+      - uses: actions/checkout@v4
+
+      # 2. Create config.js with secrets
+      - name: Setup config
+        run: |
+          echo "window.CONFIG = {
+            DONOOR_ID: '${{ secrets.DONOR_ID }}',
+            JSONBIN_KEY: '${{ secrets.JSONBIN_KEY }}'
+          }" > config.js
+
+      # 3. Deploy to GitHub Pages
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
