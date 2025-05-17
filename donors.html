@@ -34,73 +34,49 @@
     </div>
 
     <script>
-        // Sample data - in a real app, this would come from your backend
-        const donorData = {
-            "donors": {
-                "Democrat": [
-                    {
-                        "name": "Steven Hobbs",
-                        "type": "Silicon Valley Executive",
-                        "relationship": 75,
-                        "loves": ["Green Energy", "Tech Regulation"],
-                        "hates": ["Tax Increases", "Antitrust Laws"],
-                        "image": "techtitan.jpg"
-                    },
-                    {
-                        "name": "Malik Williams",
-                        "type": "Labor Organizer",
-                        "relationship": 60,
-                        "loves": ["Worker Rights", "Minimum Wage"],
-                        "hates": ["Right-to-Work", "Corporate Tax Cuts"],
-                        "image": "unionworker.jpg"
-                    },
-                    {
-                        "name": "Julie Wreath",
-                        "type": "Entertainment Executive",
-                        "relationship": 45,
-                        "loves": ["Arts Funding", "Copyright Laws"],
-                        "hates": ["Censorship", "Streaming Regulation"],
-                        "image": "actress.jpg"
-                    }
-                ],
-                "Republican": [
-                    {
-                        "name": "Jimmy Stonefeller",
-                        "type": "Energy Executive",
-                        "relationship": 80,
-                        "loves": ["Deregulation", "Drilling Rights"],
-                        "hates": ["Carbon Taxes", "Renewable Subsidies"],
-                        "image": "oiltycoon.jpg"
-                    },
-                    {
-                        "name": "Richard Sterling",
-                        "type": "Investment Banker",
-                        "relationship": 70,
-                        "loves": ["Tax Cuts", "Deregulation"],
-                        "hates": ["Financial Reform", "Wealth Taxes"],
-                        "image": "wallstreettycoon.png"
-                    },
-                    {
-                        "name": "Dwight Ikenburg",
-                        "type": "Military Industrialist",
-                        "relationship": 55,
-                        "loves": ["Defense Spending", "Foreign Interventions"],
-                        "hates": ["Budget Cuts", "Peace Treaties"],
-                        "image": "defensecontractor.jpeg"
-                    }
-                ]
-            }
-        };
-
+        // Initialize Supabase client
+        const supabaseUrl = 'YOUR_SUPABASE_URL';
+        const supabaseKey = 'YOUR_SUPABASE_ANON_KEY';
+        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+    
         // Player state
         let currentParty = "Democrat";
         let stamina = 10;
+        let donorsCache = {
+            "Democrat": [],
+            "Republican": []
+        };
         
         // Initialize the page
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
+            await fetchDonors();
             renderDonors(currentParty);
             updateStaminaDisplay();
         });
+        
+        // Fetch donors from Supabase
+        async function fetchDonors() {
+            try {
+                const { data: democratDonors, error: demError } = await supabase
+                    .from('donors')
+                    .select('*')
+                    .eq('party', 'Democrat');
+                
+                const { data: republicanDonors, error: repError } = await supabase
+                    .from('donors')
+                    .select('*')
+                    .eq('party', 'Republican');
+                
+                if (demError || repError) throw demError || repError;
+                
+                donorsCache.Democrat = democratDonors;
+                donorsCache.Republican = republicanDonors;
+                
+            } catch (error) {
+                console.error('Error fetching donors:', error);
+                showModal("Database Error", "Failed to load donor data. Please try again later.");
+            }
+        }
         
         // Switch between Democrat and Republican donors
         function switchParty(party) {
@@ -119,7 +95,7 @@
             const container = document.getElementById('donor-container');
             container.innerHTML = '';
             
-            donorData.donors[party].forEach(donor => {
+            donorsCache[party].forEach(donor => {
                 const hourly = Math.floor(500 * (1 + (donor.relationship / 10)));
                 
                 const card = document.createElement('div');
@@ -149,22 +125,40 @@
         }
         
         // Court a donor (improve relationship)
-        function courtDonor(party, donorName) {
+        async function courtDonor(party, donorName) {
             if (stamina < 1) {
                 showModal("Not Enough Stamina", "❌ You don't have enough stamina! (Need 1)");
                 return;
             }
             
-            const donor = donorData.donors[party].find(d => d.name === donorName);
+            const donor = donorsCache[party].find(d => d.name === donorName);
             const successRate = 50 + Math.floor(donor.relationship / 2);
             const roll = Math.floor(Math.random() * 100) + 1;
             
             if (roll <= successRate) {
                 const gain = 10;
-                donor.relationship = Math.min(100, donor.relationship + gain);
-                stamina -= 1;
-                updateStaminaDisplay();
-                showModal("Success!", `🎩 Success! ${donor.name}'s relationship +${gain}`);
+                const newRelationship = Math.min(100, donor.relationship + gain);
+                
+                try {
+                    // Update in database
+                    const { error } = await supabase
+                        .from('donors')
+                        .update({ relationship: newRelationship })
+                        .eq('name', donorName)
+                        .eq('party', party);
+                    
+                    if (error) throw error;
+                    
+                    // Update local cache
+                    donor.relationship = newRelationship;
+                    stamina -= 1;
+                    updateStaminaDisplay();
+                    showModal("Success!", `🎩 Success! ${donor.name}'s relationship +${gain}`);
+                    
+                } catch (error) {
+                    console.error('Error updating donor:', error);
+                    showModal("Database Error", "Failed to update donor. Please try again.");
+                }
             } else {
                 stamina -= 1;
                 updateStaminaDisplay();
@@ -176,22 +170,40 @@
         }
         
         // Attack a donor (damage relationship)
-        function attackDonor(party, donorName) {
+        async function attackDonor(party, donorName) {
             if (stamina < 2) {
                 showModal("Not Enough Stamina", "❌ You don't have enough stamina! (Need 2)");
                 return;
             }
             
-            const donor = donorData.donors[party].find(d => d.name === donorName);
+            const donor = donorsCache[party].find(d => d.name === donorName);
             const successRate = 50;
             const roll = Math.floor(Math.random() * 100) + 1;
             
             if (roll <= successRate) {
                 const loss = 5;
-                donor.relationship = Math.max(0, donor.relationship - loss);
-                stamina -= 2;
-                updateStaminaDisplay();
-                showModal("Success!", `💥 Success! ${donor.name}'s relationship -${loss}`);
+                const newRelationship = Math.max(0, donor.relationship - loss);
+                
+                try {
+                    // Update in database
+                    const { error } = await supabase
+                        .from('donors')
+                        .update({ relationship: newRelationship })
+                        .eq('name', donorName)
+                        .eq('party', party);
+                    
+                    if (error) throw error;
+                    
+                    // Update local cache
+                    donor.relationship = newRelationship;
+                    stamina -= 2;
+                    updateStaminaDisplay();
+                    showModal("Success!", `💥 Success! ${donor.name}'s relationship -${loss}`);
+                    
+                } catch (error) {
+                    console.error('Error updating donor:', error);
+                    showModal("Database Error", "Failed to update donor. Please try again.");
+                }
             } else {
                 stamina -= 2;
                 updateStaminaDisplay();
