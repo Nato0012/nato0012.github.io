@@ -36,7 +36,7 @@
     <script>
         // JSONBin.io configuration (replace with your actual values)
         const JSONBIN_BIN_ID = 6828666b8960c979a59b4b87
-        const JSONBIN_API_KEY = $2a$10$wROQnOm9TLcSgYNoBVB2e.LzytwY6Y1Xn1YLla4GcUfAjFSFdnAE6
+        const JSONBIN_API_KEY = $2a$10$2sTu9v8iTMdY6Z5E6VDwXujUOyWftMEmahL5F3KpsnOppKr9iNQMO
         const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
 
         // Player state
@@ -61,7 +61,7 @@
             try {
                 const response = await fetch(JSONBIN_URL, {
                     headers: {
-                        'X-Master-Key': $2a$10$wROQnOm9TLcSgYNoBVB2e.LzytwY6Y1Xn1YLla4GcUfAjFSFdnAE6
+                        'X-Master-Key': JSONBIN_API_KEY
                     }
                 });
                 const data = await response.json();
@@ -105,7 +105,7 @@
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Master-Key': $2a$10$wROQnOm9TLcSgYNoBVB2e.LzytwY6Y1Xn1YLla4GcUfAjFSFdnAE6
+                        'X-Master-Key': JSONBIN_API_KEY
                     },
                     body: JSON.stringify(donorData)
                 });
