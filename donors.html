@@ -61,28 +61,43 @@
         });
         
         // Fetch donors from Supabase
-        async function fetchDonors() {
-            try {
-                const { data: democratDonors, error: demError } = await supabase
-                    .from('donors')
-                    .select('*')
-                    .eq('party', 'Democrat');
-                
-                const { data: republicanDonors, error: repError } = await supabase
-                    .from('donors')
-                    .select('*')
-                    .eq('party', 'Republican');
-                
-                if (demError || repError) throw demError || repError;
-                
-                donorsCache.Democrat = democratDonors;
-                donorsCache.Republican = republicanDonors;
-                
-            } catch (error) {
-                console.error('Error fetching donors:', error);
-                showModal("Database Error", "Failed to load donor data. Please try again later.");
-            }
-        }
+async function fetchDonors() {
+  try {
+    console.log("Fetching donors...");
+    
+    // Fetch Democrats
+    const { data: democratDonors, error: demError } = await supabase
+      .from('donors')
+      .select('*')
+      .eq('party', 'Democrat');
+    
+    if (demError) {
+      console.error("Democrat Error:", demError);
+      throw demError;
+    }
+
+    // Fetch Republicans
+    const { data: republicanDonors, error: repError } = await supabase
+      .from('donors')
+      .select('*')
+      .eq('party', 'Republican');
+    
+    if (repError) {
+      console.error("Republican Error:", repError);
+      throw repError;
+    }
+
+    console.log("Democrats:", democratDonors);
+    console.log("Republicans:", republicanDonors);
+    
+    donorsCache.Democrat = democratDonors || [];
+    donorsCache.Republican = republicanDonors || [];
+    
+  } catch (error) {
+    console.error("Full Error:", error);
+    showModal("Database Error", `Failed to load data: ${error.message}`);
+  }
+}
         
         // Switch between Democrat and Republican donors
         function switchParty(party) {
