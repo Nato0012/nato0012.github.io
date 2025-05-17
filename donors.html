@@ -8,7 +8,6 @@
     <link rel="stylesheet" href="donors.css">
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=2">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=2">
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <div class="stamina-display">
@@ -37,12 +36,14 @@
       Test Supabase Connection
     </button>
 
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script>
         // Initialize Supabase client
         const supabaseUrl = 'https://inxveugqdkjyrwpkouvv.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlueHZldWdxZGtqeXJ3cGtvdXZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc0MzIyMTksImV4cCI6MjA2MzAwODIxOX0.4CpmQQQ--jJnNP7gtso7Jy7nGTvZidxWyU8QDnTxit8';
         document.addEventListener('DOMContentLoaded', () => {
             const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+      window.supabase = supabase;
         });
     
         // Player state
