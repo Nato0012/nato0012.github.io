@@ -8,25 +8,11 @@
     <link rel="stylesheet" href="donors.css">
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=2">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=2">
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <script>
-        // Initialize Supabase client
-        const supabaseUrl = 'https://inxveugqdkjyrwpkouvv.supabase.co';
-        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlueHZldWdxZGtqeXJ3cGtvdXZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc0MzIyMTksImV4cCI6MjA2MzAwODIxOX0.4CpmQQQ--jJnNP7gtso7Jy7nGTvZidxWyU8QDnTxit8';
-        document.addEventListener('DOMContentLoaded', () => {
-            const supabase = supabase.createClient(supabaseUrl, supabaseKey);
-      window.supabase = supabase;
-        });
-    </script>
 </head>
 <body>
     <div class="stamina-display">
         Stamina: <span id="stamina">10</span>
     </div>
-
-    <button onclick="testSupabase()" style="background:red;color:white;padding:10px;">
-      TEST SUPABASE NOW
-    </button>
 
     <h1>Political Donor Management</h1>
     
@@ -46,17 +32,21 @@
             <button onclick="closeModal()">Close</button>
         </div>
     </div>
-    <button onclick="testConnection()" style="position:fixed;top:10px;right:10px;">
-      Test Supabase Connection
-    </button>
 
     <script>
+        // JSONBin.io configuration (replace with your actual values)
+        const JSONBIN_BIN_ID = 6828666b8960c979a59b4b87
+        const JSONBIN_API_KEY = $2a$10$wROQnOm9TLcSgYNoBVB2e.LzytwY6Y1Xn1YLla4GcUfAjFSFdnAE6
+        const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+
         // Player state
         let currentParty = "Democrat";
         let stamina = 10;
-        let donorsCache = {
-            "Democrat": [],
-            "Republican": []
+        let donorData = {
+            "donors": {
+                "Democrat": [],
+                "Republican": []
+            }
         };
         
         // Initialize the page
@@ -66,44 +56,65 @@
             updateStaminaDisplay();
         });
         
-        // Fetch donors from Supabase
-async function fetchDonors() {
-  try {
-    console.log("Fetching donors...");
-    
-    // Fetch Democrats
-    const { data: democratDonors, error: demError } = await supabase
-      .from('donors')
-      .select('*')
-      .eq('party', 'Democrat');
-    
-    if (demError) {
-      console.error("Democrat Error:", demError);
-      throw demError;
-    }
-
-    // Fetch Republicans
-    const { data: republicanDonors, error: repError } = await supabase
-      .from('donors')
-      .select('*')
-      .eq('party', 'Republican');
-    
-    if (repError) {
-      console.error("Republican Error:", repError);
-      throw repError;
-    }
-
-    console.log("Democrats:", democratDonors);
-    console.log("Republicans:", republicanDonors);
-    
-    donorsCache.Democrat = democratDonors || [];
-    donorsCache.Republican = republicanDonors || [];
-    
-  } catch (error) {
-    console.error("Full Error:", error);
-    showModal("Database Error", `Failed to load data: ${error.message}`);
-  }
-}
+        // Fetch donors from JSONBin.io
+        async function fetchDonors() {
+            try {
+                const response = await fetch(JSONBIN_URL, {
+                    headers: {
+                        'X-Master-Key': $2a$10$wROQnOm9TLcSgYNoBVB2e.LzytwY6Y1Xn1YLla4GcUfAjFSFdnAE6
+                    }
+                });
+                const data = await response.json();
+                donorData = data.record;
+                console.log("Fetched donor data:", donorData);
+            } catch (error) {
+                console.error("Error fetching donors:", error);
+                showModal("Database Error", "Failed to load donor data. Using fallback data.");
+                // Fallback data if fetch fails
+                donorData = {
+                    "donors": {
+                        "Democrat": [
+                            {
+                                "name": "Steven Hobbs",
+                                "type": "Silicon Valley Executive",
+                                "relationship": 75,
+                                "loves": ["Green Energy", "Tech Regulation"],
+                                "hates": ["Tax Increases", "Antitrust Laws"],
+                                "image": "techtitan.jpg"
+                            }
+                        ],
+                        "Republican": [
+                            {
+                                "name": "Jimmy Stonefeller",
+                                "type": "Energy Executive",
+                                "relationship": 80,
+                                "loves": ["Deregulation", "Drilling Rights"],
+                                "hates": ["Carbon Taxes", "Renewable Subsidies"],
+                                "image": "oiltycoon.jpg"
+                            }
+                        ]
+                    }
+                };
+            }
+        }
+        
+        // Save donors to JSONBin.io
+        async function saveDonors() {
+            try {
+                await fetch(JSONBIN_URL, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Key': $2a$10$wROQnOm9TLcSgYNoBVB2e.LzytwY6Y1Xn1YLla4GcUfAjFSFdnAE6
+                    },
+                    body: JSON.stringify(donorData)
+                });
+                console.log("Data saved successfully");
+            } catch (error) {
+                console.error("Error saving donors:", error);
+                showModal("Save Error", "Failed to save donor data.");
+            }
+        }
         
         // Switch between Democrat and Republican donors
         function switchParty(party) {
@@ -122,7 +133,7 @@ async function fetchDonors() {
             const container = document.getElementById('donor-container');
             container.innerHTML = '';
             
-            donorsCache[party].forEach(donor => {
+            donorData.donors[party].forEach(donor => {
                 const hourly = Math.floor(500 * (1 + (donor.relationship / 10)));
                 
                 const card = document.createElement('div');
@@ -158,41 +169,23 @@ async function fetchDonors() {
                 return;
             }
             
-            const donor = donorsCache[party].find(d => d.name === donorName);
+            const donor = donorData.donors[party].find(d => d.name === donorName);
             const successRate = 50 + Math.floor(donor.relationship / 2);
             const roll = Math.floor(Math.random() * 100) + 1;
             
             if (roll <= successRate) {
                 const gain = 10;
-                const newRelationship = Math.min(100, donor.relationship + gain);
-                
-                try {
-                    // Update in database
-                    const { error } = await supabase
-                        .from('donors')
-                        .update({ relationship: newRelationship })
-                        .eq('name', donorName)
-                        .eq('party', party);
-                    
-                    if (error) throw error;
-                    
-                    // Update local cache
-                    donor.relationship = newRelationship;
-                    stamina -= 1;
-                    updateStaminaDisplay();
-                    showModal("Success!", `🎩 Success! ${donor.name}'s relationship +${gain}`);
-                    
-                } catch (error) {
-                    console.error('Error updating donor:', error);
-                    showModal("Database Error", "Failed to update donor. Please try again.");
-                }
+                donor.relationship = Math.min(100, donor.relationship + gain);
+                stamina -= 1;
+                updateStaminaDisplay();
+                await saveDonors(); // Save to JSONBin.io
+                showModal("Success!", `🎩 Success! ${donor.name}'s relationship +${gain}`);
             } else {
                 stamina -= 1;
                 updateStaminaDisplay();
                 showModal("Rejected", `💔 ${donor.name} rejected your advances!`);
             }
             
-            // Re-render to show updated relationship
             renderDonors(currentParty);
         }
         
@@ -203,41 +196,23 @@ async function fetchDonors() {
                 return;
             }
             
-            const donor = donorsCache[party].find(d => d.name === donorName);
+            const donor = donorData.donors[party].find(d => d.name === donorName);
             const successRate = 50;
             const roll = Math.floor(Math.random() * 100) + 1;
             
             if (roll <= successRate) {
                 const loss = 5;
-                const newRelationship = Math.max(0, donor.relationship - loss);
-                
-                try {
-                    // Update in database
-                    const { error } = await supabase
-                        .from('donors')
-                        .update({ relationship: newRelationship })
-                        .eq('name', donorName)
-                        .eq('party', party);
-                    
-                    if (error) throw error;
-                    
-                    // Update local cache
-                    donor.relationship = newRelationship;
-                    stamina -= 2;
-                    updateStaminaDisplay();
-                    showModal("Success!", `💥 Success! ${donor.name}'s relationship -${loss}`);
-                    
-                } catch (error) {
-                    console.error('Error updating donor:', error);
-                    showModal("Database Error", "Failed to update donor. Please try again.");
-                }
+                donor.relationship = Math.max(0, donor.relationship - loss);
+                stamina -= 2;
+                updateStaminaDisplay();
+                await saveDonors(); // Save to JSONBin.io
+                showModal("Success!", `💥 Success! ${donor.name}'s relationship -${loss}`);
             } else {
                 stamina -= 2;
                 updateStaminaDisplay();
                 showModal("Resisted", `🛡️ ${donor.name} resisted your attack!`);
             }
             
-            // Re-render to show updated relationship
             renderDonors(currentParty);
         }
         
@@ -257,21 +232,6 @@ async function fetchDonors() {
         function updateStaminaDisplay() {
             document.getElementById('stamina').textContent = stamina;
         }
-        async function testSupabase() {
-            try {
-              const { data, error } = await supabase
-                .from('donors')
-                .select('*')
-                .limit(1);
-              
-              alert(error ? `❌ Error: ${error.message}` : `✅ Works! Found ${data.length} donors`);
-            } catch (e) {
-              alert(`🔥 CRASH: ${e.message}`);
-            }
-          }
-    
-    // Run check when page loads
-    document.addEventListener('DOMContentLoaded', checkSupabase);
     </script>
 </body>
 </html>
