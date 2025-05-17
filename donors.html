@@ -32,6 +32,9 @@
             <button onclick="closeModal()">Close</button>
         </div>
     </div>
+    <button onclick="testConnection()" style="position:fixed;top:10px;right:10px;">
+      Test Supabase Connection
+    </button>
 
     <script>
         // Initialize Supabase client
@@ -229,6 +232,20 @@
         // Update stamina display
         function updateStaminaDisplay() {
             document.getElementById('stamina').textContent = stamina;
+        }
+        async function testConnection() {
+          try {
+            const { data, error } = await supabase
+              .from('donors')
+              .select('*')
+              .limit(1);
+            
+            console.log("Connection test result:", { data, error });
+            alert(error ? `Error: ${error.message}` : `Success! Found ${data.length} donors`);
+          } catch (err) {
+            console.error("Connection test failed:", err);
+            alert(`Connection failed: ${err.message}`);
+          }
         }
     </script>
 </body>
