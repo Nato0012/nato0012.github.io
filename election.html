@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PA Election Simulator</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .election-container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .results {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+        }
+        .party {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            flex: 1;
+            margin: 0 10px;
+        }
+        .democrat {
+            background-color: #3498db20;
+            border: 2px solid #3498db;
+        }
+        .republican {
+            background-color: #e74c3c20;
+            border: 2px solid #e74c3c;
+        }
+        .percentage {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .democrat .percentage {
+            color: #3498db;
+        }
+        .republican .percentage {
+            color: #e74c3c;
+        }
+        .turnout {
+            text-align: center;
+            font-size: 1.2em;
+            margin: 15px 0;
+        }
+        .time-info {
+            text-align: center;
+            margin: 15px 0;
+            font-size: 1.1em;
+        }
+        .status {
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.3em;
+            margin: 15px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .leading-dem {
+            background-color: #3498db20;
+            color: #3498db;
+        }
+        .leading-rep {
+            background-color: #e74c3c20;
+            color: #e74c3c;
+        }
+        .final {
+            background-color: #2ecc7120;
+            color: #27ae60;
+            font-size: 1.5em;
+        }
+        .history {
+            margin-top: 30px;
+        }
+        .history h3 {
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        .history-item {
+            background-color: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            margin: 10px 0;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="election-container">
+        <h1>Pennsylvania Election Simulator</h1>
+        
+        <div class="status" id="status">Loading election data...</div>
+        
+        <div class="results">
+            <div class="party democrat">
+                <h2>Democrat</h2>
+                <div class="percentage" id="dem-percent">--%</div>
+                <div id="dem-moe">MOE: ±--%</div>
+            </div>
+            
+            <div class="party republican">
+                <h2>Republican</h2>
+                <div class="percentage" id="rep-percent">--%</div>
+                <div id="rep-moe">MOE: ±--%</div>
+            </div>
+        </div>
+        
+        <div class="turnout">
+            <div>Turnout: <span id="turnout">--</span>% of eligible voters</div>
+        </div>
+        
+        <div class="time-info">
+            <div>Time remaining: <span id="time-remaining">--:--</span></div>
+            <div>Next update at: <span id="next-update">--:--</span> EST</div>
+        </div>
+        
+        <div class="controls">
+            <button id="manual-update">Force Update Now</button>
+        </div>
+    </div>
+    
+    <div class="election-container history">
+        <h3>Previous Updates</h3>
+        <div id="history-list"></div>
+    </div>
+
+    <script>
+        // Initialize Supabase
+        const supabaseUrl = 'YOUR_SUPABASE_URL';
+        const supabaseKey = 'YOUR_SUPABASE_KEY';
+        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+        
+        // Election state
+        let electionState = {
+            active: false,
+            startTime: null,
+            endTime: null,
+            trueResults: null,
+            currentResults: null,
+            history: [],
+            updateInterval: null,
+            nextUpdateTime: null
+        };
+        
+        // DOM elements
+        const statusEl = document.getElementById('status');
+        const demPercentEl = document.getElementById('dem-percent');
+        const repPercentEl = document.getElementById('rep-percent');
+        const demMoeEl = document.getElementById('dem-moe');
+        const repMoeEl = document.getElementById('rep-moe');
+        const turnoutEl = document.getElementById('turnout');
+        const timeRemainingEl = document.getElementById('time-remaining');
+        const nextUpdateEl = document.getElementById('next-update');
+        const historyListEl = document.getElementById('history-list');
+        const manualUpdateBtn = document.getElementById('manual-update');
+        
+        // Event listeners
+        manualUpdateBtn.addEventListener('click', forceUpdate);
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', initElection);
+        
+        async function initElection() {
+            // Load voter blocs from Supabase
+            const { data: blocs, error } = await supabase
+                .from('voter_blocs')
+                .select('*');
+            
+            if (error) {
+                console.error('Error loading voter blocs:', error);
+                statusEl.textContent = 'Error loading voter data';
+                return;
+            }
+            
+            // Calculate true results
+            const trueResults = calculateResults(blocs);
+            electionState.trueResults = trueResults;
+            
+            // Schedule election
+            scheduleElection();
+            
+            // Start the update cycle
+            checkForUpdates();
+        }
+        
+        function calculateResults(blocs) {
+            let dVotes = 0;
+            let rVotes = 0;
+            
+            for (const bloc of blocs) {
+                const dShare = (50 + bloc.base_lean) * bloc.size * bloc.turnout_factor / 100;
+                const rShare = (50 - bloc.base_lean) * bloc.size * bloc.turnout_factor / 100;
+                dVotes += dShare;
+                rVotes += rShare;
+            }
+            
+            const totalCast = dVotes + rVotes;
+            if (totalCast === 0) {
+                return { D: 0, R: 0, total_turnout: 0 };
+            }
+            
+            return {
+                D: parseFloat((dVotes / totalCast * 100).toFixed(1)),
+                R: parseFloat((rVotes / totalCast * 100).toFixed(1)),
+                total_turnout: parseFloat((totalCast * 100).toFixed(1))
+            };
+        }
+        
+        function applyMarginOfError(results, moePercent) {
+            const moe = (Math.random() * 2 - 1) * moePercent; // Random between -moe and +moe
+            let dResult = results.D + moe;
+            let rResult = results.R - moe;
+            
+            // Ensure results stay between 0-100%
+            dResult = Math.max(0, Math.min(100, dResult));
+            rResult = Math.max(0, Math.min(100, rResult));
+            
+            // Normalize to ensure they sum to 100%
+            const total = dResult + rResult;
+            if (total > 0) {
+                dResult = parseFloat((dResult / total * 100).toFixed(1));
+                rResult = parseFloat((rResult / total * 100).toFixed(1));
+            }
+            
+            return {
+                D: dResult,
+                R: rResult,
+                total_turnout: results.total_turnout,
+                moe: parseFloat(moePercent.toFixed(1))
+            };
+        }
+        
+        function scheduleElection() {
+            const now = new Date();
+            const estOffset = -5 * 60 * 60 * 1000; // EST is UTC-5
+            const nowEST = new Date(now.getTime() + estOffset);
+            
+            // Today at 4pm EST
+            let nextElectionStart = new Date(nowEST);
+            nextElectionStart.setHours(16, 0, 0, 0);
+            
+            // If it's already past 4pm today, schedule for tomorrow
+            if (nowEST > nextElectionStart) {
+                nextElectionStart.setDate(nextElectionStart.getDate() + 1);
+            }
+            
+            // Convert back to local time for scheduling
+            const localStartTime = new Date(nextElectionStart.getTime() - estOffset);
+            
+            // Election ends 47 hours and 45 minutes after start (2 days minus 15 minutes)
+            const electionEndTime = new Date(localStartTime.getTime() + (47 * 60 * 60 * 1000) + (45 * 60 * 1000));
+            
+            electionState.startTime = localStartTime;
+            electionState.endTime = electionEndTime;
+            
+            // Check if we're currently in an election period
+            if (now >= localStartTime && now <= electionEndTime) {
+                startElection();
+            } else {
+                const timeUntilStart = localStartTime - now;
+                statusEl.textContent = `Next election starts at ${formatTime(localStartTime)}`;
+                
+                // Schedule the start of the election
+                setTimeout(startElection, timeUntilStart);
+            }
+        }
+        
+        function startElection() {
+            electionState.active = true;
+            electionState.history = [];
+            
+            // Set initial results with MOE
+            electionState.currentResults = applyMarginOfError(
+                electionState.trueResults, 
+                2.0 // Initial MOE of 2%
+            );
+            
+            updateDisplay();
+            logHistoryUpdate();
+            
+            // Start the update cycle
+            scheduleNextUpdate();
+            
+            statusEl.textContent = "Election in progress";
+            statusEl.className = "status leading-" + (electionState.currentResults.D > electionState.currentResults.R ? "dem" : "rep");
+        }
+        
+        function endElection() {
+            electionState.active = false;
+            
+            // Show final results with 0% MOE
+            electionState.currentResults = {
+                ...electionState.trueResults,
+                moe: 0.0
+            };
+            
+            updateDisplay();
+            logHistoryUpdate();
+            
+            statusEl.textContent = "FINAL RESULTS: " + 
+                (electionState.currentResults.D > electionState.currentResults.R ? "DEMOCRAT WINS" : "REPUBLICAN WINS");
+            statusEl.className = "status final";
+            
+            // Schedule next election for tomorrow at 4pm
+            scheduleElection();
+        }
+        
+        function scheduleNextUpdate() {
+            if (!electionState.active) return;
+            
+            const now = new Date();
+            const timeRemaining = electionState.endTime - now;
+            
+            if (timeRemaining <= 0) {
+                endElection();
+                return;
+            }
+            
+            // Calculate minutes since last half hour
+            const minutes = now.getMinutes();
+            const seconds = now.getSeconds();
+            
+            // Determine next update time based on election phase
+            let nextUpdate;
+            
+            if (timeRemaining <= 60 * 60 * 1000) {
+                // Last hour - updates at XX:00 and XX:45
+                if (minutes < 45) {
+                    if (minutes < 30) {
+                        nextUpdate = new Date(now);
+                        nextUpdate.setMinutes(30, 0, 0);
+                    } else {
+                        nextUpdate = new Date(now);
+                        nextUpdate.setMinutes(45, 0, 0);
+                    }
+                } else {
+                    nextUpdate = new Date(now);
+                    nextUpdate.setHours(now.getHours() + 1);
+                    nextUpdate.setMinutes(0, 0, 0);
+                }
+            } else {
+                // Normal phase - updates every 30 minutes
+                nextUpdate = new Date(now);
+                if (minutes < 30) {
+                    nextUpdate.setMinutes(30, 0, 0);
+                } else {
+                    nextUpdate.setHours(now.getHours() + 1);
+                    nextUpdate.setMinutes(0, 0, 0);
+                }
+            }
+            
+            // If the next update would be after election ends, schedule final update
+            if (nextUpdate > electionState.endTime) {
+                nextUpdate = new Date(electionState.endTime);
+            }
+            
+            electionState.nextUpdateTime = nextUpdate;
+            const timeUntilUpdate = nextUpdate - now;
+            
+            // Update the display with next update time
+            updateDisplay();
+            
+            // Schedule the update
+            clearTimeout(electionState.updateInterval);
+            electionState.updateInterval = setTimeout(performUpdate, timeUntilUpdate);
+        }
+        
+        function performUpdate() {
+            if (!electionState.active) return;
+            
+            const now = new Date();
+            const timeRemaining = electionState.endTime - now;
+            
+            // Calculate decreasing MOE (linear from 2% to 0% over election period)
+            const totalElectionTime = electionState.endTime - electionState.startTime;
+            const elapsedTime = now - electionState.startTime;
+            const progress = elapsedTime / totalElectionTime;
+            const moePercent = 2.0 * (1 - progress);
+            
+            // Apply MOE to get new results
+            electionState.currentResults = applyMarginOfError(
+                electionState.trueResults, 
+                moePercent
+            );
+            
+            updateDisplay();
+            logHistoryUpdate();
+            
+            // If this was the final update, end the election
+            if (now >= electionState.endTime) {
+                endElection();
+            } else {
+                scheduleNextUpdate();
+            }
+        }
+        
+        function forceUpdate() {
+            if (electionState.active) {
+                performUpdate();
+            }
+        }
+        
+        function updateDisplay() {
+            if (!electionState.currentResults) return;
+            
+            const results = electionState.currentResults;
+            const isFinal = !electionState.active;
+            
+            // Update percentages
+            demPercentEl.textContent = results.D + "%";
+            repPercentEl.textContent = results.R + "%";
+            
+            // Update MOE display
+            demMoeEl.textContent = "MOE: ±" + results.moe + "%";
+            repMoeEl.textContent = "MOE: ±" + results.moe + "%";
+            
+            // Update turnout
+            turnoutEl.textContent = results.total_turnout;
+            
+            // Update status
+            if (isFinal) {
+                statusEl.textContent = "FINAL RESULTS: " + 
+                    (results.D > results.R ? "DEMOCRAT WINS" : "REPUBLICAN WINS");
+                statusEl.className = "status final";
+            } else {
+                statusEl.textContent = results.D > results.R ? "Democrat Leading" : "Republican Leading";
+                statusEl.className = "status leading-" + (results.D > results.R ? "dem" : "rep");
+            }
+            
+            // Update time information
+            if (electionState.active) {
+                const now = new Date();
+                const remainingMs = electionState.endTime - now;
+                const hours = Math.floor(remainingMs / (1000 * 60 * 60));
+                const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+                timeRemainingEl.textContent = `${hours}h ${minutes}m`;
+                
+                if (electionState.nextUpdateTime) {
+                    nextUpdateEl.textContent = formatTime(electionState.nextUpdateTime);
+                }
+            } else {
+                timeRemainingEl.textContent = "Election ended";
+                nextUpdateEl.textContent = "N/A";
+            }
+        }
+        
+        function logHistoryUpdate() {
+            if (!electionState.currentResults) return;
+            
+            const now = new Date();
+            const results = electionState.currentResults;
+            const isFinal = !electionState.active;
+            
+            const historyItem = {
+                time: now,
+                results: { ...results },
+                isFinal: isFinal
+            };
+            
+            electionState.history.unshift(historyItem);
+            renderHistory();
+        }
+        
+        function renderHistory() {
+            historyListEl.innerHTML = '';
+            
+            for (const item of electionState.history.slice(0, 10)) { // Show last 10 updates
+                const itemEl = document.createElement('div');
+                itemEl.className = 'history-item';
+                
+                const timeStr = formatTime(item.time);
+                const leader = item.results.D > item.results.R ? "DEM" : "GOP";
+                const margin = Math.abs(item.results.D - item.results.R).toFixed(1);
+                
+                itemEl.innerHTML = `
+                    <div><strong>${timeStr}</strong> ${item.isFinal ? '(FINAL)' : ''}</div>
+                    <div>${leader} +${margin}% (D ${item.results.D}% - R ${item.results.R}%)</div>
+                    <div>Turnout: ${item.results.total_turnout}% • MOE: ±${item.results.moe}%</div>
+                `;
+                
+                historyListEl.appendChild(itemEl);
+            }
+        }
+        
+        function formatTime(date) {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        }
+        
+        function checkForUpdates() {
+            if (electionState.active) {
+                const now = new Date();
+                if (now >= electionState.nextUpdateTime) {
+                    performUpdate();
+                }
+            }
+            
+            // Check every minute to handle cases where tab was inactive
+            setTimeout(checkForUpdates, 60000);
+        }
+    </script>
+</body>
+</html>
