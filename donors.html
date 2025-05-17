@@ -24,9 +24,9 @@
         Stamina: <span id="stamina">10</span>
     </div>
 
-    <div id="supabase-debug" style="position:fixed; bottom:0; background:white; padding:10px; z-index:1000;">
-    Supabase Status: <span id="supabase-status">Checking...</span>
-  </div>
+    <button onclick="testSupabase()" style="background:red;color:white;padding:10px;">
+      TEST SUPABASE NOW
+    </button>
 
     <h1>Political Donor Management</h1>
     
@@ -257,29 +257,18 @@ async function fetchDonors() {
         function updateStaminaDisplay() {
             document.getElementById('stamina').textContent = stamina;
         }
-    async function checkSupabase() {
-      try {
-        // Test if supabase exists
-        if (typeof supabase === 'undefined') {
-          document.getElementById('supabase-status').textContent = 'Library not loaded';
-          return;
-        }
-        
-        // Test a simple query
-        const { data, error } = await supabase
-          .from('donors')
-          .select('*')
-          .limit(1);
-        
-        if (error) {
-          document.getElementById('supabase-status').textContent = `Error: ${error.message}`;
-        } else {
-          document.getElementById('supabase-status').textContent = `Connected! Found ${data.length} donors`;
-        }
-      } catch (e) {
-        document.getElementById('supabase-status').textContent = `Critical: ${e.message}`;
-      }
-    }
+        async function testSupabase() {
+            try {
+              const { data, error } = await supabase
+                .from('donors')
+                .select('*')
+                .limit(1);
+              
+              alert(error ? `❌ Error: ${error.message}` : `✅ Works! Found ${data.length} donors`);
+            } catch (e) {
+              alert(`🔥 CRASH: ${e.message}`);
+            }
+          }
     
     // Run check when page loads
     document.addEventListener('DOMContentLoaded', checkSupabase);
