@@ -1,12 +1,12 @@
-name: Deploy with Config
+name: Deploy Donor App
 on:
   push:
-    branches: [ "main" ]  # Runs on pushes to main branch
+    branches: [ "main" ]  # Trigger on main branch pushes
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: write  # Required to upload files
+  pages: write     # Needed for GitHub Pages
+  id-token: write  # Required for authentication
 
 jobs:
   deploy:
@@ -15,22 +15,40 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # 1. Checkout code
       - uses: actions/checkout@v4
 
-      # Create config.js with secrets
+      # 2. Create config.js with your secrets
       - name: Setup config
         run: |
           echo "window.CONFIG = {
             DONOR_ID: '${{ secrets.DONOR_ID }}',
             JSONBIN_KEY: '${{ secrets.JSONBIN_KEY }}'
-          }" > ./config.js
+          }" > config.js
 
-      # Optional: Verify config was created
-      - name: Debug
-        run: cat config.js  # Prints config (keys masked in logs)
+          # Verify file creation (debug)
+          echo "Config file created at:"
+          ls -la config.js
+          echo "First 2 lines:"
+          head -n 2 config.js
 
-      # Deploy to GitHub Pages
-      - uses: peaceiris/actions-gh-pages@v3
+      # 3. Debug: List all files (optional)
+      - name: Verify files
+        run: |
+          echo "Repository contents:"
+          find . -type f -not -path './.git/*'
+
+      # 4. Deploy to GitHub Pages
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./
+          github_token: ${{ secrets.GITHUB_TOKEN }}  # Auto-provided by GitHub
+          publish_dir: ./  # Deploy everything
+          keep_files: false  # Clean old files
+          enable_jekyll: false  # Disable Jekyll processing
+
+      # 5. Post-deployment verification
+      - name: Verify deployment
+        run: |
+          echo "Deployment complete!"
+          echo "Visit: https://${{ github.repository_owner }}.github.io/${{ github.repository_name }}/"
