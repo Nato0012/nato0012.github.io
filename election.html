@@ -538,5 +538,37 @@ async function initElection() {
             setTimeout(checkForUpdates, 60000);
         }
     </script>
+    <div style="
+      position: fixed; 
+      top: 10px; 
+      right: 10px; 
+      background: white; 
+      padding: 10px; 
+      border: 2px solid red;
+      z-index: 9999;
+    ">
+      <h3>Live Status</h3>
+      <div id="live-debug"></div>
+    </div>
+    
+    <script>
+      // Add this to your existing initElection() function, right at the start:
+      function logStatus(msg) {
+        document.getElementById('live-debug').innerHTML += 
+          `<div>${new Date().toLocaleTimeString()}: ${msg}</div>`;
+      }
+      
+      // Example usage in your code:
+      async function initElection() {
+        logStatus("Starting initialization...");
+        try {
+          logStatus("Loading config...");
+          if (!window.CONFIG) throw new Error("config.js not loaded");
+          // ... rest of your existing code
+        } catch (e) {
+          logStatus(`ERROR: ${e.message}`);
+        }
+      }
+    </script>
 </body>
 </html>
