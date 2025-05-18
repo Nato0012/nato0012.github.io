@@ -171,6 +171,27 @@
     </div>
 
     <script>
+        function logStatus(msg) {
+            // Try regular debug panel first
+            const debugEl = document.getElementById('debug-content');
+            if (debugEl) {
+                debugEl.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${msg}</div>`;
+            }
+            
+            // Fallback to emergency panel
+            const fallbackEl = document.getElementById('debug-fallback');
+            if (fallbackEl) {
+                fallbackEl.innerHTML += `${msg}<br>`;
+            }
+            
+            // Always log to console
+            console.log(msg);
+        }
+
+        // Initialize immediately
+        logStatus("Script loading...");
+        document.getElementById('debug-info').style.display = 'block';
+
         // Election state
         let electionState = {
             active: false,
@@ -200,77 +221,99 @@
         // Event listeners
         manualUpdateBtn.addEventListener('click', forceUpdate);
         
-        // Initialize
+        // Main initialization
         document.addEventListener('DOMContentLoaded', async () => {
-            statusEl.textContent = "Initializing...";
             try {
+                logStatus("DOM content loaded");
+                statusEl.textContent = "Initializing...";
+                
                 await fetchEnvVars();
                 await initElection();
+                
+                statusEl.textContent = "Ready";
+                logStatus("Initialization completed successfully");
+                
             } catch (error) {
-                statusEl.textContent = "Initialization failed - check debug panel";
+                logStatus(`Initialization failed: ${error.message}`);
+                if (error.stack) logStatus(`Stack trace: ${error.stack}`);
+                
+                statusEl.textContent = "Initialization failed - see debug panel";
                 statusEl.style.color = "red";
+                
                 document.getElementById('debug-info').style.display = 'block';
             }
         });
 
         async function fetchEnvVars() {
-            statusEl.textContent = "Fetching environment variables...";
             try {
-                const response = await fetch('/api/getEnv');
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                const data = await response.json();
+                logStatus("Fetching environment variables from /api/getEnv");
+                statusEl.textContent = "Loading configuration...";
                 
-                if (!data.jsonBinKey || !data.blocsBin) {
-                    throw new Error("Missing required environment variables");
+                const response = await fetch('/api/getEnv');
+                logStatus(`Received response: ${response.status}`);
+                
+                if (!response.ok) {
+                    throw new Error(`API responded with ${response.status}`);
                 }
+                
+                const data = await response.json();
+                logStatus("Parsed environment variables");
+                
+                if (!data.jsonBinKey) throw new Error("Missing JSONBIN_KEY in response");
+                if (!data.blocsBin) throw new Error("Missing BLOCS_BIN in response");
                 
                 electionState.jsonBinKey = data.jsonBinKey;
                 electionState.blocsBin = data.blocsBin;
+                
                 logStatus("Environment variables loaded successfully");
                 return true;
+                
             } catch (error) {
-                logStatus(`Failed to fetch env vars: ${error.message}`);
-                throw error; // Re-throw to be caught by the outer catch
+                logStatus(`Failed to load environment variables: ${error.message}`);
+                throw error;
             }
         }
-        
+
         async function initElection() {
             try {
+                logStatus("Initializing election simulation");
                 statusEl.textContent = "Connecting to database...";
-                logStatus("Starting data fetch from JSONBin");
                 
+                if (!electionState.jsonBinKey || !electionState.blocsBin) {
+                    throw new Error("Configuration incomplete");
+                }
+                
+                logStatus(`Fetching data from bin: ${electionState.blocsBin}`);
                 const response = await fetch(`https://api.jsonbin.io/v3/b/${electionState.blocsBin}/latest`, {
                     headers: { 'X-Master-Key': electionState.jsonBinKey }
                 });
                 
+                logStatus(`Database response: ${response.status}`);
                 if (!response.ok) {
                     throw new Error(`Database error: ${response.status}`);
                 }
                 
-                statusEl.textContent = "Processing election data...";
+                statusEl.textContent = "Processing data...";
                 const data = await response.json();
+                logStatus("Data received, validating...");
                 
                 if (!data.record?.pa_voter_blocs) {
-                    throw new Error("Invalid data format received");
+                    throw new Error("Invalid data format - missing voter blocs");
                 }
                 
                 statusEl.textContent = "Calculating results...";
                 electionState.trueResults = calculateResults(data.record.pa_voter_blocs);
+                logStatus(`Calculated results: D ${electionState.trueResults.D}% / R ${electionState.trueResults.R}%`);
                 
-                statusEl.textContent = "Setting up election...";
+                statusEl.textContent = "Setting up simulation...";
                 scheduleElection();
                 checkForUpdates();
                 
-                statusEl.textContent = "Election simulation ready";
-                statusEl.className = "status";
+                logStatus("Election simulation ready");
                 
             } catch (error) {
-                statusEl.textContent = "Failed to initialize election";
-                statusEl.style.color = "red";
-                logStatus(`Error: ${error.message}`);
-                document.getElementById('debug-info').style.display = 'block';
+                logStatus(`Election initialization failed: ${error.message}`);
+                throw error;
             }
         }
         
