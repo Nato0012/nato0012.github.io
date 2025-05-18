@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Presidency Awaits - Donors</title>
+    <link rel="stylesheet" href="global.css">
+    <link rel="stylesheet" href="donors.css">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=2">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=2">
+</head>
+<body>
+    <div class="stamina-display">
+        Stamina: <span id="stamina">10</span>
+    </div>
+
+    <h1>Political Donor Management</h1>
+    
+    <div class="party-tabs">
+        <div class="party-tab active" onclick="switchParty('Democrat')">Democrat Donors</div>
+        <div class="party-tab" onclick="switchParty('Republican')">Republican Donors</div>
+    </div>
+    
+    <div id="donor-container" class="donor-grid">
+        <!-- Donor cards will be inserted here by JavaScript -->
+    </div>
+    
+    <div id="result-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="modal-title">Result</h2>
+            <p id="modal-message">This is a message</p>
+            <button onclick="closeModal()">Close</button>
+        </div>
+    </div>
+
+    <script>
+        // JSONBin.io configuration (replace with your actual values)
+        const JSONBIN_BIN_ID = '6828666b8960c979a59b4b87';
+        const JSONBIN_API_KEY = '$2a$10$2sTu9v8iTMdY6Z5E6VDwXujUOyWftMEmahL5F3KpsnOppKr9iNQMO';
+        const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+
+        // Player state
+        let currentParty = "Democrat";
+        let stamina = 10;
+        let donorData = {
+            "donors": {
+                "Democrat": [],
+                "Republican": []
+            }
+        };
+        
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', async function() {
+            await fetchDonors();
+            renderDonors(currentParty);
+            updateStaminaDisplay();
+        });
+        
+        // Fetch donors from JSONBin.io
+        async function fetchDonors() {
+            try {
+                const response = await fetch(JSONBIN_URL, {
+                    headers: {
+                        'X-Master-Key': JSONBIN_API_KEY
+                    }
+                });
+                const data = await response.json();
+                donorData = data.record;
+                console.log("Fetched donor data:", donorData);
+            } catch (error) {
+                console.error("Error fetching donors:", error);
+                showModal("Database Error", "Failed to load donor data. Using fallback data.");
+                // Fallback data if fetch fails
+                donorData = {
+                    "donors": {
+                        "Democrat": [
+                            {
+                                "name": "Steven Hobbs",
+                                "type": "Silicon Valley Executive",
+                                "relationship": 75,
+                                "loves": ["Green Energy", "Tech Regulation"],
+                                "hates": ["Tax Increases", "Antitrust Laws"],
+                                "image": "techtitan.jpg"
+                            }
+                        ],
+                        "Republican": [
+                            {
+                                "name": "Jimmy Stonefeller",
+                                "type": "Energy Executive",
+                                "relationship": 80,
+                                "loves": ["Deregulation", "Drilling Rights"],
+                                "hates": ["Carbon Taxes", "Renewable Subsidies"],
+                                "image": "oiltycoon.jpg"
+                            }
+                        ]
+                    }
+                };
+            }
+        }
+        
+        // Save donors to JSONBin.io
+        async function saveDonors() {
+            try {
+                await fetch(JSONBIN_URL, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Key': JSONBIN_API_KEY
+                    },
+                    body: JSON.stringify(donorData)
+                });
+                console.log("Data saved successfully");
+            } catch (error) {
+                console.error("Error saving donors:", error);
+                showModal("Save Error", "Failed to save donor data.");
+            }
+        }
+        
+        // Switch between Democrat and Republican donors
+        function switchParty(party) {
+            currentParty = party;
+            renderDonors(party);
+            
+            // Update tab styles
+            document.querySelectorAll('.party-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelector(`.party-tab:nth-child(${party === 'Democrat' ? 1 : 2})`).classList.add('active');
+        }
+        
+        // Render donor cards for the selected party
+        function renderDonors(party) {
+            const container = document.getElementById('donor-container');
+            container.innerHTML = '';
+            
+            donorData.donors[party].forEach(donor => {
+                const hourly = Math.floor(500 * (1 + (donor.relationship / 10)));
+                
+                const card = document.createElement('div');
+                card.className = 'donor-card';
+                card.innerHTML = `
+                    <img src="${donor.image}" alt="${donor.name}" class="donor-image" onerror="this.src='https://via.placeholder.com/300x200?text=Donor+Image'">
+                    <div class="donor-info">
+                        <div class="donor-name">${donor.name}</div>
+                        <div class="donor-type">${donor.type}</div>
+                        <div class="donor-stats">
+                            Relationship: ${donor.relationship}/100<br>
+                            Hourly Donation: $${hourly.toLocaleString()}
+                        </div>
+                        <div class="donor-likes">
+                            <strong>Loves:</strong> ${donor.loves.join(', ')}<br>
+                            <strong>Hates:</strong> ${donor.hates.join(', ')}
+                        </div>
+                        <div class="donor-buttons">
+                            <button class="btn btn-court" onclick="courtDonor('${party}', '${donor.name}')">Court (-1 Stamina)</button>
+                            <button class="btn btn-attack" onclick="attackDonor('${party}', '${donor.name}')">Attack (-2 Stamina)</button>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+        
+        // Court a donor (improve relationship)
+        async function courtDonor(party, donorName) {
+            if (stamina < 1) {
+                showModal("Not Enough Stamina", "❌ You don't have enough stamina! (Need 1)");
+                return;
+            }
+            
+            const donor = donorData.donors[party].find(d => d.name === donorName);
+            const successRate = 50 + Math.floor(donor.relationship / 2);
+            const roll = Math.floor(Math.random() * 100) + 1;
+            
+            if (roll <= successRate) {
+                const gain = 10;
+                donor.relationship = Math.min(100, donor.relationship + gain);
+                stamina -= 1;
+                updateStaminaDisplay();
+                await saveDonors(); // Save to JSONBin.io
+                showModal("Success!", `🎩 Success! ${donor.name}'s relationship +${gain}`);
+            } else {
+                stamina -= 1;
+                updateStaminaDisplay();
+                showModal("Rejected", `💔 ${donor.name} rejected your advances!`);
+            }
+            
+            renderDonors(currentParty);
+        }
+        
+        // Attack a donor (damage relationship)
+        async function attackDonor(party, donorName) {
+            if (stamina < 2) {
+                showModal("Not Enough Stamina", "❌ You don't have enough stamina! (Need 2)");
+                return;
+            }
+            
+            const donor = donorData.donors[party].find(d => d.name === donorName);
+            const successRate = 50;
+            const roll = Math.floor(Math.random() * 100) + 1;
+            
+            if (roll <= successRate) {
+                const loss = 5;
+                donor.relationship = Math.max(0, donor.relationship - loss);
+                stamina -= 2;
+                updateStaminaDisplay();
+                await saveDonors(); // Save to JSONBin.io
+                showModal("Success!", `💥 Success! ${donor.name}'s relationship -${loss}`);
+            } else {
+                stamina -= 2;
+                updateStaminaDisplay();
+                showModal("Resisted", `🛡️ ${donor.name} resisted your attack!`);
+            }
+            
+            renderDonors(currentParty);
+        }
+        
+        // Show modal with result message
+        function showModal(title, message) {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-message').innerHTML = message;
+            document.getElementById('result-modal').style.display = 'flex';
+        }
+        
+        // Close modal
+        function closeModal() {
+            document.getElementById('result-modal').style.display = 'none';
+        }
+        
+        // Update stamina display
+        function updateStaminaDisplay() {
+            document.getElementById('stamina').textContent = stamina;
+        }
+    </script>
+</body>
+</html>
