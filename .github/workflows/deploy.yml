@@ -22,8 +22,8 @@ jobs:
       - name: Setup config
         run: |
           echo "window.CONFIG = {
-            DONOR_BIN: '${{ secrets.JSONBIN_BIN_ID }}',
-            JSONBIN_KEY: '${{ secrets.JSONBIN_API_KEY }}'
+            DONOR_ID: '${{ secrets.DONOR_ID }}',
+            JSONBIN_KEY: '${{ secrets.JSONBIN_KEY }}'
           }" > config.js
 
       - name: Deploy
