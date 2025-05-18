@@ -1,10 +1,8 @@
-name: Deploy to GitHub Pages
-
+name: Deploy with Config
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main" ]  # Runs on pushes to main branch
 
-# Add this permissions block
 permissions:
   contents: write
   pages: write
@@ -19,6 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Create config.js with secrets
       - name: Setup config
         run: |
           echo "window.CONFIG = {
@@ -26,8 +25,12 @@ jobs:
             JSONBIN_KEY: '${{ secrets.JSONBIN_KEY }}'
           }" > config.js
 
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
+      # Optional: Verify config was created
+      - name: Debug
+        run: cat config.js  # Prints config (keys masked in logs)
+
+      # Deploy to GitHub Pages
+      - uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./
