@@ -111,6 +111,15 @@
     </style>
 </head>
 <body>
+        <div style="position:fixed; top:0; left:0; background:red; color:white; padding:10px; z-index:9999;" id="debug-test">
+      Debug Panel Test
+    </div>
+    <script>
+      setTimeout(() => {
+        document.getElementById('debug-test').textContent = 
+          "Debug panel exists: " + !!document.getElementById('debug-content');
+      }, 500);
+    </script>
     <div class="election-container">
         <h1>Pennsylvania Election Simulator</h1>
         
