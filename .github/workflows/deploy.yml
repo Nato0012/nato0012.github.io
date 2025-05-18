@@ -23,7 +23,7 @@ jobs:
           echo "window.CONFIG = {
             DONOR_ID: '${{ secrets.DONOR_ID }}',
             JSONBIN_KEY: '${{ secrets.JSONBIN_KEY }}'
-          }" > config.js
+          }" > ./config.js
 
       # Optional: Verify config was created
       - name: Debug
