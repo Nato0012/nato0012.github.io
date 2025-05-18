@@ -222,56 +222,78 @@
                 throw error;
             }
         }
+    async function initElection() {
+        const debug = (msg) => {
+            const debugEl = document.getElementById('debug-content');
+            debugEl.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${msg}</div>`;
+            console.log(msg);
+        };
 
-        async function initElection() {
-            const debug = (msg) => {
-                const debugEl = document.getElementById('debug-content');
-                debugEl.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${msg}</div>`;
-                console.log(msg);
-            };
-
-            try {
-                debug("Starting election initialization...");
-                
-                if (!electionState.blocsBin || !electionState.jsonBinKey) {
-                    throw new Error("Missing bin ID or API key");
-                }
-                debug("API credentials verified");
-
-                debug(`Fetching data from bin: ${electionState.blocsBin}`);
-                const response = await fetch(`https://api.jsonbin.io/v3/b/${electionState.blocsBin}/latest`, {
-                    headers: { 'X-Master-Key': electionState.jsonBinKey }
-                });
-                
-                debug(`Response status: ${response.status}`);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-
-                const data = await response.json();
-                debug("Data received from API");
-                
-                if (!data.record?.pa_voter_blocs) {
-                    throw new Error("JSON data missing 'pa_voter_blocs' array");
-                }
-                debug("Voter blocs data validated");
-
-                electionState.trueResults = calculateResults(data.record.pa_voter_blocs);
-                debug("Election results calculated");
-                
-                scheduleElection();
-                checkForUpdates();
-                debug("Election simulation started");
-
-            } catch (error) {
-                const errorMsg = `ERROR: ${error.message}`;
-                debug(errorMsg);
-                statusEl.textContent = errorMsg;
-                statusEl.style.color = "red";
-                document.getElementById('debug-info').style.display = 'block';
+        try {
+            statusEl.textContent = "Fetching credentials from server...";
+            debug("Starting initialization");
+            
+            if (!electionState.blocsBin || !electionState.jsonBinKey) {
+                throw new Error("Configuration incomplete - missing bin ID or API key");
             }
+            debug("Credentials verified");
+            debug(`Using BLOCS_BIN: ${electionState.blocsBin}`);
+            debug(`Using JSONBIN_KEY: ${electionState.jsonBinKey.substring(0, 5)}...`);
+
+            statusEl.textContent = "Connecting to JSONBin.io...";
+            debug(`Fetching data from bin: ${electionState.blocsBin}`);
+            
+            const response = await fetch(`https://api.jsonbin.io/v3/b/${electionState.blocsBin}/latest`, {
+                headers: { 'X-Master-Key': electionState.jsonBinKey }
+            });
+            
+            debug(`Response status: ${response.status}`);
+            
+            if (!response.ok) {
+                throw new Error(`Server responded with error: ${response.status}`);
+            }
+
+            statusEl.textContent = "Processing election data...";
+            const data = await response.json();
+            debug("Data received, validating structure");
+            
+            if (!data.record?.pa_voter_blocs) {
+                throw new Error("Data format invalid - missing voter blocs");
+            }
+            
+            debug(`Found ${data.record.pa_voter_blocs.length} voter blocs`);
+            statusEl.textContent = "Calculating results...";
+            
+            electionState.trueResults = calculateResults(data.record.pa_voter_blocs);
+            debug("Results calculated successfully");
+            
+            statusEl.textContent = "Setting up election simulation...";
+            scheduleElection();
+            checkForUpdates();
+            
+            debug("Election simulation ready");
+            statusEl.textContent = "Election data loaded successfully";
+            statusEl.className = "status";
+
+        } catch (error) {
+            const errorMsg = `ERROR: ${error.message}`;
+            debug(errorMsg);
+            statusEl.textContent = "Failed to load election data";
+            statusEl.className = "status";
+            statusEl.style.color = "red";
+            
+            // Show detailed error in debug panel
+            debug("Stack trace: " + error.stack);
+            document.getElementById('debug-info').style.display = 'block';
+            
+            // Fallback empty data
+            electionState.trueResults = {
+                D: 0,
+                R: 0,
+                total_turnout: 0
+            };
         }
+    }
         
         function calculateResults(blocs) {
             let dVotes = 0;
