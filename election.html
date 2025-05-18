@@ -183,37 +183,37 @@
         
         async function initElection() {
             try {
-                // Replace with your actual jsonbin.io URL and API key
+                console.log("Fetching data from jsonbin.io...");
                 const binId = window.CONFIG.BLOCS_BIN;
                 const apiKey = window.CONFIG.JSONBIN_KEY;
                 
                 const response = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
-                    headers: {
-                        'X-Master-Key': apiKey
-                    }
+                    headers: { 'X-Master-Key': apiKey }
                 });
                 
+                console.log("Response status:", response.status);
+                
                 if (!response.ok) {
-                    throw new Error('Failed to fetch data from jsonbin.io');
+                    throw new Error(`HTTP error! Status: ${response.status}`);
                 }
                 
                 const data = await response.json();
+                console.log("Fetched data:", data);
+                
+                if (!data.record?.pa_voter_blocs) {
+                    throw new Error("Missing 'pa_voter_blocs' in JSON data");
+                }
+                
                 const blocs = data.record.pa_voter_blocs;
-                
-                // Calculate true results
-                const trueResults = calculateResults(blocs);
-                electionState.trueResults = trueResults;
-                
-                // Schedule election
+                electionState.trueResults = calculateResults(blocs);
                 scheduleElection();
-                
-                // Start the update cycle
                 checkForUpdates();
                 
             } catch (error) {
-                console.error('Error initializing election:', error);
-                statusEl.textContent = 'Error loading election data';
+                console.error('Error:', error);
+                statusEl.textContent = `Error: ${error.message}`;
             }
+        }
         }
         
         function calculateResults(blocs) {
