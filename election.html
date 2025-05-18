@@ -108,117 +108,86 @@
             text-align: center;
             margin: 20px 0;
         }
+        #debug-info {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            z-index: 1000;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            border: 1px solid #444;
+        }
+        #debug-content div {
+            padding: 3px 0;
+            border-bottom: 1px solid #333;
+        }
+        #debug-toggle {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            z-index: 1001;
+        }
     </style>
 </head>
 <body>
-        <div style="position:fixed; top:0; left:0; background:red; color:white; padding:10px; z-index:9999;" id="debug-test">
-      Debug Panel Test
-    </div>
-    <script>
-      setTimeout(() => {
-        document.getElementById('debug-test').textContent = 
-          "Debug panel exists: " + !!document.getElementById('debug-content');
-      }, 500);
-    </script>
     <div class="election-container">
         <h1>Pennsylvania Election Simulator</h1>
-        
-        <div class="status" id="status">Loading election data...</div>
-        
+        <div class="status" id="status">Initializing...</div>
         <div class="results">
             <div class="party democrat">
                 <h2>Democrat</h2>
                 <div class="percentage" id="dem-percent">--%</div>
                 <div id="dem-moe">MOE: ±--%</div>
             </div>
-            
             <div class="party republican">
                 <h2>Republican</h2>
                 <div class="percentage" id="rep-percent">--%</div>
                 <div id="rep-moe">MOE: ±--%</div>
             </div>
         </div>
-
-        <div id="debug-info" style="
-            position: fixed;
-            bottom: 10px;
-            left: 10px;
-            background: white;
-            padding: 10px;
-            border: 1px solid red;
-            z-index: 1000;
-            display: none;
-        ">
-            <h3>Debug Information</h3>
-            <div id="debug-content"></div>
-            <button onclick="document.getElementById('debug-info').style.display='none'">
-                Hide Debug
-            </button>
-        </div>
-        <button onclick="document.getElementById('debug-info').style.display='block'" 
-                style="position:fixed; bottom:10px; right:10px;">
-            Show Debug
-        </button>
-        
         <div class="turnout">
             <div>Turnout: <span id="turnout">--</span>% of eligible voters</div>
         </div>
-        
         <div class="time-info">
             <div>Time remaining: <span id="time-remaining">--:--</span></div>
             <div>Next update at: <span id="next-update">--:--</span> EST</div>
         </div>
-        
         <div class="controls">
             <button id="manual-update">Force Update Now</button>
         </div>
     </div>
-    
     <div class="election-container history">
         <h3>Previous Updates</h3>
         <div id="history-list"></div>
     </div>
+    <div id="debug-info">
+        <h3 style="margin-top:0;">Debug Console</h3>
+        <div id="debug-content"></div>
+    </div>
+    <button id="debug-toggle" onclick="document.getElementById('debug-info').style.display='none'">Hide Debug</button>
 
     <script>
-        // 1. Ensure debug elements exist
-        const debugPanel = document.getElementById('debug-info') || document.body.insertAdjacentHTML('afterbegin', `
-          <div id="debug-info" style="
-            position:fixed; top:0; left:0; right:0; background:black; color:white; 
-            padding:10px; z-index:9999; font-family:monospace;">
-            <h3>Debug Panel</h3>
-            <div id="debug-content"></div>
-          </div>
-        `);
-        
-        // 2. Simple logging test
-        function log(msg) {
-          const content = document.getElementById('debug-content');
-          if (content) content.innerHTML += `<div>${msg}</div>`;
-          console.log(msg); 
+        function logStatus(msg) {
+            const debugEl = document.getElementById('debug-content');
+            if (debugEl) {
+                const entry = document.createElement('div');
+                entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+                debugEl.appendChild(entry);
+                debugEl.scrollTop = debugEl.scrollHeight;
+            }
+            console.log(msg);
         }
         
-        // 3. Immediate test messages
-        log("Script started");
         document.getElementById('debug-info').style.display = 'block';
+        logStatus("Application starting...");
         
-        // 4. Test fetch
-        log("Testing /api/getEnv...");
-        fetch('/api/getEnv')
-          .then(r => {
-            log(`Status: ${r.status}`);
-            return r.json().catch(e => log(`JSON parse error: ${e}`));
-          })
-          .then(data => {
-            log(`Response: ${JSON.stringify(data)}`);
-            document.getElementById('status').textContent = "API Connected!";
-          })
-          .catch(e => {
-            log(`FETCH ERROR: ${e.message}`);
-            document.getElementById('status').textContent = "API Failed - See Debug";
-          });
-
-        // Election state
-        let electionState = {
+        const electionState = {
             active: false,
             startTime: null,
             endTime: null,
@@ -227,11 +196,13 @@
             history: [],
             updateInterval: null,
             nextUpdateTime: null,
-            jsonBinKey: null,
-            blocsBin: null
+            credentials: {
+                jsonBinKey: null,
+                blocsBin: null,
+                donorId: null
+            }
         };
         
-        // DOM elements
         const statusEl = document.getElementById('status');
         const demPercentEl = document.getElementById('dem-percent');
         const repPercentEl = document.getElementById('rep-percent');
@@ -243,101 +214,44 @@
         const historyListEl = document.getElementById('history-list');
         const manualUpdateBtn = document.getElementById('manual-update');
         
-        // Event listeners
-        manualUpdateBtn.addEventListener('click', forceUpdate);
-        
-        // Main initialization
-        document.addEventListener('DOMContentLoaded', async () => {
+        async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
             try {
-                logStatus("DOM content loaded");
-                statusEl.textContent = "Initializing...";
-                
-                await fetchEnvVars();
-                await initElection();
-                
-                statusEl.textContent = "Ready";
-                logStatus("Initialization completed successfully");
-                
+                const response = await fetch(url, options);
+                if (response.ok) return response;
+                if (retries > 0) {
+                    logStatus(`Retrying ${url} (${retries} left)...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return fetchWithRetry(url, options, retries - 1, delay);
+                }
+                throw new Error(`Failed after ${retries} retries`);
             } catch (error) {
-                logStatus(`Initialization failed: ${error.message}`);
-                if (error.stack) logStatus(`Stack trace: ${error.stack}`);
-                
-                statusEl.textContent = "Initialization failed - see debug panel";
-                statusEl.style.color = "red";
-                
-                document.getElementById('debug-info').style.display = 'block';
+                throw new Error(`Network error: ${error.message}`);
             }
-        });
-
+        }
+        
         async function fetchEnvVars() {
+            statusEl.textContent = "Loading configuration...";
+            logStatus("Fetching environment variables");
+            
             try {
-                logStatus("Fetching environment variables from /api/getEnv");
-                statusEl.textContent = "Loading configuration...";
+                const response = await fetchWithRetry('/api/getEnv');
+                const data = await response.json();
                 
-                const response = await fetch('/api/getEnv');
-                logStatus(`Received response: ${response.status}`);
-                
-                if (!response.ok) {
-                    throw new Error(`API responded with ${response.status}`);
+                if (!data.jsonBinKey || !data.blocsBin) {
+                    throw new Error("Invalid environment variables received");
                 }
                 
-                const data = await response.json();
-                logStatus("Parsed environment variables");
+                electionState.credentials = {
+                    jsonBinKey: data.jsonBinKey,
+                    blocsBin: data.blocsBin,
+                    donorId: data.donorId
+                };
                 
-                if (!data.jsonBinKey) throw new Error("Missing JSONBIN_KEY in response");
-                if (!data.blocsBin) throw new Error("Missing BLOCS_BIN in response");
-                
-                electionState.jsonBinKey = data.jsonBinKey;
-                electionState.blocsBin = data.blocsBin;
-                
-                logStatus("Environment variables loaded successfully");
+                logStatus("Configuration loaded successfully");
                 return true;
                 
             } catch (error) {
-                logStatus(`Failed to load environment variables: ${error.message}`);
-                throw error;
-            }
-        }
-
-        async function initElection() {
-            try {
-                logStatus("Initializing election simulation");
-                statusEl.textContent = "Connecting to database...";
-                
-                if (!electionState.jsonBinKey || !electionState.blocsBin) {
-                    throw new Error("Configuration incomplete");
-                }
-                
-                logStatus(`Fetching data from bin: ${electionState.blocsBin}`);
-                const response = await fetch(`https://api.jsonbin.io/v3/b/${electionState.blocsBin}/latest`, {
-                    headers: { 'X-Master-Key': electionState.jsonBinKey }
-                });
-                
-                logStatus(`Database response: ${response.status}`);
-                if (!response.ok) {
-                    throw new Error(`Database error: ${response.status}`);
-                }
-                
-                statusEl.textContent = "Processing data...";
-                const data = await response.json();
-                logStatus("Data received, validating...");
-                
-                if (!data.record?.pa_voter_blocs) {
-                    throw new Error("Invalid data format - missing voter blocs");
-                }
-                
-                statusEl.textContent = "Calculating results...";
-                electionState.trueResults = calculateResults(data.record.pa_voter_blocs);
-                logStatus(`Calculated results: D ${electionState.trueResults.D}% / R ${electionState.trueResults.R}%`);
-                
-                statusEl.textContent = "Setting up simulation...";
-                scheduleElection();
-                checkForUpdates();
-                
-                logStatus("Election simulation ready");
-                
-            } catch (error) {
-                logStatus(`Election initialization failed: ${error.message}`);
+                logStatus(`Configuration error: ${error.message}`);
                 throw error;
             }
         }
@@ -608,9 +522,59 @@
             setTimeout(checkForUpdates, 60000);
         }
         
-        function logStatus(msg) {
-            document.getElementById('live-debug').innerHTML += 
-                `<div>${new Date().toLocaleTimeString()}: ${msg}</div>`;
+        async function initElection() {
+            statusEl.textContent = "Initializing election...";
+            logStatus("Starting election initialization");
+            
+            try {
+                statusEl.textContent = "Loading voter data...";
+                logStatus(`Fetching from bin: ${electionState.credentials.blocsBin}`);
+                
+                const response = await fetchWithRetry(
+                    `https://api.jsonbin.io/v3/b/${electionState.credentials.blocsBin}/latest`,
+                    {
+                        headers: { 'X-Master-Key': electionState.credentials.jsonBinKey }
+                    }
+                );
+                
+                const data = await response.json();
+                logStatus("Data received, validating...");
+                
+                if (!data.record?.pa_voter_blocs) {
+                    throw new Error("Invalid data format - missing voter blocs");
+                }
+                
+                statusEl.textContent = "Calculating results...";
+                electionState.trueResults = calculateResults(data.record.pa_voter_blocs);
+                logStatus(`Base results: D ${electionState.trueResults.D}% / R ${electionState.trueResults.R}%`);
+                
+                statusEl.textContent = "Starting simulation...";
+                scheduleElection();
+                checkForUpdates();
+                
+                logStatus("Election simulation ready");
+                statusEl.textContent = "Ready";
+                statusEl.style.color = "#27ae60";
+                
+            } catch (error) {
+                logStatus(`Initialization failed: ${error.message}`);
+                statusEl.textContent = "Initialization error - see debug";
+                statusEl.style.color = "#e74c3c";
+                throw error;
+            }
         }
+        
+        manualUpdateBtn.addEventListener('click', forceUpdate);
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await fetchEnvVars();
+                await initElection();
+            } catch (error) {
+                logStatus(`Fatal error: ${error.message}`);
+                if (error.stack) logStatus(error.stack);
+            }
+        });
     </script>
+</body>
 </html>
