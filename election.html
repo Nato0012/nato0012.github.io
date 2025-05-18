@@ -180,26 +180,42 @@
     </div>
 
     <script>
-        function logStatus(msg) {
-            // Try regular debug panel first
-            const debugEl = document.getElementById('debug-content');
-            if (debugEl) {
-                debugEl.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${msg}</div>`;
-            }
-            
-            // Fallback to emergency panel
-            const fallbackEl = document.getElementById('debug-fallback');
-            if (fallbackEl) {
-                fallbackEl.innerHTML += `${msg}<br>`;
-            }
-            
-            // Always log to console
-            console.log(msg);
+        // 1. Ensure debug elements exist
+        const debugPanel = document.getElementById('debug-info') || document.body.insertAdjacentHTML('afterbegin', `
+          <div id="debug-info" style="
+            position:fixed; top:0; left:0; right:0; background:black; color:white; 
+            padding:10px; z-index:9999; font-family:monospace;">
+            <h3>Debug Panel</h3>
+            <div id="debug-content"></div>
+          </div>
+        `);
+        
+        // 2. Simple logging test
+        function log(msg) {
+          const content = document.getElementById('debug-content');
+          if (content) content.innerHTML += `<div>${msg}</div>`;
+          console.log(msg); 
         }
-
-        // Initialize immediately
-        logStatus("Script loading...");
+        
+        // 3. Immediate test messages
+        log("Script started");
         document.getElementById('debug-info').style.display = 'block';
+        
+        // 4. Test fetch
+        log("Testing /api/getEnv...");
+        fetch('/api/getEnv')
+          .then(r => {
+            log(`Status: ${r.status}`);
+            return r.json().catch(e => log(`JSON parse error: ${e}`));
+          })
+          .then(data => {
+            log(`Response: ${JSON.stringify(data)}`);
+            document.getElementById('status').textContent = "API Connected!";
+          })
+          .catch(e => {
+            log(`FETCH ERROR: ${e.message}`);
+            document.getElementById('status').textContent = "API Failed - See Debug";
+          });
 
         // Election state
         let electionState = {
