@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="donors.css">
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=2">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=2">
+    <script src="config.js"></script>
 </head>
 <body>
     <div class="stamina-display">
@@ -35,8 +36,8 @@
 
     <script>
         // JSONBin.io configuration (replace with your actual values)
-        const JSONBIN_BIN_ID = '6828666b8960c979a59b4b87';
-        const JSONBIN_API_KEY = '$2a$10$2sTu9v8iTMdY6Z5E6VDwXujUOyWftMEmahL5F3KpsnOppKr9iNQMO';
+        const JSONBIN_BIN_ID = window.CONFIG.DONOR_ID;
+        const JSONBIN_API_KEY = window.CONFIG.JSONBIN_KEY;
         const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
 
         // Player state
