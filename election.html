@@ -173,91 +173,177 @@
     <button id="debug-toggle" onclick="document.getElementById('debug-info').style.display='none'">Hide Debug</button>
 
     <script>
-        function logStatus(msg) {
-            const debugEl = document.getElementById('debug-content');
-            if (debugEl) {
-                const entry = document.createElement('div');
-                entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-                debugEl.appendChild(entry);
-                debugEl.scrollTop = debugEl.scrollHeight;
-            }
+        const debug = {
+          panel: document.getElementById('debug-content'),
+          log: (msg) => {
+            const entry = document.createElement('div');
+            entry.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            debug.panel.appendChild(entry);
+            debug.panel.scrollTop = debug.panel.scrollHeight;
             console.log(msg);
-        }
-        
-        document.getElementById('debug-info').style.display = 'block';
-        logStatus("Application starting...");
-        
-        const electionState = {
-            active: false,
-            startTime: null,
-            endTime: null,
-            trueResults: null,
-            currentResults: null,
-            history: [],
-            updateInterval: null,
-            nextUpdateTime: null,
-            credentials: {
-                jsonBinKey: null,
-                blocsBin: null,
-                donorId: null
-            }
+          },
+          error: (err) => {
+            debug.log(`<span style="color:red">ERROR: ${err.message}</span>`);
+            if (err.stack) debug.log(`<span style="color:red">STACK: ${err.stack}</span>`);
+          }
         };
         
-        const statusEl = document.getElementById('status');
-        const demPercentEl = document.getElementById('dem-percent');
-        const repPercentEl = document.getElementById('rep-percent');
-        const demMoeEl = document.getElementById('dem-moe');
-        const repMoeEl = document.getElementById('rep-moe');
-        const turnoutEl = document.getElementById('turnout');
-        const timeRemainingEl = document.getElementById('time-remaining');
-        const nextUpdateEl = document.getElementById('next-update');
-        const historyListEl = document.getElementById('history-list');
-        const manualUpdateBtn = document.getElementById('manual-update');
+        // Show debug panel immediately
+        document.getElementById('debug-info').style.display = 'block';
+        debug.log("Debug system initialized");
         
+        // ======================
+        // CORE FUNCTIONALITY
+        // ======================
+        const electionState = {
+          credentials: {},
+          data: null,
+          status: {
+            initialized: false,
+            apiConnected: false,
+            dataLoaded: false
+          }
+        };
+        
+        // DOM Elements
+        const statusEl = document.getElementById('status');
+        const initStatusEl = document.createElement('div');
+        initStatusEl.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          background: #333;
+          color: white;
+          padding: 10px;
+          z-index: 9999;
+          font-family: monospace;
+        `;
+        document.body.prepend(initStatusEl);
+        
+        // ======================
+        // API COMMUNICATION
+        // ======================
         async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
-          for (let i = 0; i < retries; i++) {
+          for (let attempt = 1; attempt <= retries; attempt++) {
             try {
+              debug.log(`Attempt ${attempt}/${retries}: ${url}`);
               const response = await fetch(url, options);
-              if (response.status === 404 && i < retries - 1) {
-                // Special handling for Vercel cold starts
-                await new Promise(r => setTimeout(r, delay * (i + 1)));
-                continue;
+              
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
               }
-              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              
               return response;
             } catch (error) {
-              if (i === retries - 1) throw error;
-              await new Promise(r => setTimeout(r, delay * (i + 1)));
+              if (attempt === retries) throw error;
+              await new Promise(r => setTimeout(r, delay * attempt));
             }
           }
         }
         
-        async function fetchEnvVars() {
-            statusEl.textContent = "Loading configuration...";
-            logStatus("Fetching environment variables");
+        async function loadConfiguration() {
+          try {
+            initStatusEl.textContent = "🔄 Connecting to API...";
+            debug.log("Fetching environment variables");
             
-            try {
-                const response = await fetchWithRetry('/api/getEnv');
-                const data = await response.json();
-                
-                if (!data.jsonBinKey || !data.blocsBin) {
-                    throw new Error("Invalid environment variables received");
-                }
-                
-                electionState.credentials = {
-                    jsonBinKey: data.jsonBinKey,
-                    blocsBin: data.blocsBin,
-                    donorId: data.donorId
-                };
-                
-                logStatus("Configuration loaded successfully");
-                return true;
-                
-            } catch (error) {
-                logStatus(`Configuration error: ${error.message}`);
-                throw error;
+            const response = await fetchWithRetry('/api/getEnv', {
+              headers: { 'Accept': 'application/json' }
+            });
+            
+            const data = await response.json();
+            debug.log("API Response:", JSON.stringify(data));
+            
+            if (!data.jsonBinKey || !data.blocsBin) {
+              throw new Error("Invalid API response - missing required fields");
             }
+            
+            electionState.credentials = data;
+            electionState.status.apiConnected = true;
+            initStatusEl.textContent = "✅ API Connected";
+            debug.log("Configuration loaded successfully");
+            
+            return true;
+          } catch (error) {
+            initStatusEl.textContent = "❌ API Connection Failed";
+            debug.error(error);
+            throw error;
+          }
         }
+        
+        async function loadElectionData() {
+          try {
+            initStatusEl.textContent = "🔄 Loading election data...";
+            debug.log(`Fetching from JSONBin: ${electionState.credentials.blocsBin}`);
+            
+            const response = await fetchWithRetry(
+              `https://api.jsonbin.io/v3/b/${electionState.credentials.blocsBin}/latest`,
+              {
+                headers: { 'X-Master-Key': electionState.credentials.jsonBinKey }
+              }
+            );
+            
+            const data = await response.json();
+            debug.log("Election data received");
+            
+            if (!data.record?.pa_voter_blocs) {
+              throw new Error("Invalid data format - missing voter blocs");
+            }
+            
+            electionState.data = data.record;
+            electionState.status.dataLoaded = true;
+            initStatusEl.textContent = "✅ Data Loaded";
+            debug.log(`Loaded ${data.record.pa_voter_blocs.length} voter blocs`);
+            
+            return true;
+          } catch (error) {
+            initStatusEl.textContent = "❌ Data Loading Failed";
+            debug.error(error);
+            throw error;
+          }
+        }
+        
+        // ======================
+        // INITIALIZATION
+        // ======================
+        async function initializeApp() {
+          try {
+            // Phase 1: Load configuration
+            await loadConfiguration();
+            
+            // Phase 2: Load data
+            await loadElectionData();
+            
+            // Phase 3: Start simulation
+            initStatusEl.textContent = "🚀 Starting election simulation...";
+            debug.log("Initializing election simulation");
+            
+            // Initialize your election simulation here
+            electionState.status.initialized = true;
+            initStatusEl.textContent = "✅ System Ready";
+            statusEl.textContent = "Election simulation ready";
+            statusEl.style.color = "green";
+            
+            debug.log("Application initialized successfully");
+            
+            // Now call your existing initElection() function
+            initElection();
+            
+          } catch (error) {
+            initStatusEl.textContent = "❌ Initialization Failed";
+            statusEl.textContent = "System error - see debug panel";
+            statusEl.style.color = "red";
+            debug.error(error);
+            
+            // Fallback data for demo purposes
+            electionState.data = {
+              pa_voter_blocs: [] // Your fallback data here
+            };
+          }
+        }
+        
+        // Start the application
+        document.addEventListener('DOMContentLoaded', initializeApp);
         
         function calculateResults(blocs) {
             let dVotes = 0;
@@ -520,64 +606,9 @@
                 if (now >= electionState.nextUpdateTime) {
                     performUpdate();
                 }
-            }
-            
+            }           
             setTimeout(checkForUpdates, 60000);
         }
-        
-        async function initElection() {
-            statusEl.textContent = "Initializing election...";
-            logStatus("Starting election initialization");
-            
-            try {
-                statusEl.textContent = "Loading voter data...";
-                logStatus(`Fetching from bin: ${electionState.credentials.blocsBin}`);
-                
-                const response = await fetchWithRetry(
-                    `https://api.jsonbin.io/v3/b/${electionState.credentials.blocsBin}/latest`,
-                    {
-                        headers: { 'X-Master-Key': electionState.credentials.jsonBinKey }
-                    }
-                );
-                
-                const data = await response.json();
-                logStatus("Data received, validating...");
-                
-                if (!data.record?.pa_voter_blocs) {
-                    throw new Error("Invalid data format - missing voter blocs");
-                }
-                
-                statusEl.textContent = "Calculating results...";
-                electionState.trueResults = calculateResults(data.record.pa_voter_blocs);
-                logStatus(`Base results: D ${electionState.trueResults.D}% / R ${electionState.trueResults.R}%`);
-                
-                statusEl.textContent = "Starting simulation...";
-                scheduleElection();
-                checkForUpdates();
-                
-                logStatus("Election simulation ready");
-                statusEl.textContent = "Ready";
-                statusEl.style.color = "#27ae60";
-                
-            } catch (error) {
-                logStatus(`Initialization failed: ${error.message}`);
-                statusEl.textContent = "Initialization error - see debug";
-                statusEl.style.color = "#e74c3c";
-                throw error;
-            }
-        }
-        
-        manualUpdateBtn.addEventListener('click', forceUpdate);
-        
-        document.addEventListener('DOMContentLoaded', async () => {
-            try {
-                await fetchEnvVars();
-                await initElection();
-            } catch (error) {
-                logStatus(`Fatal error: ${error.message}`);
-                if (error.stack) logStatus(error.stack);
-            }
-        });
     </script>
 </body>
 </html>
