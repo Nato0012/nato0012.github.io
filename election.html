@@ -215,18 +215,21 @@
         const manualUpdateBtn = document.getElementById('manual-update');
         
         async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
+          for (let i = 0; i < retries; i++) {
             try {
-                const response = await fetch(url, options);
-                if (response.ok) return response;
-                if (retries > 0) {
-                    logStatus(`Retrying ${url} (${retries} left)...`);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    return fetchWithRetry(url, options, retries - 1, delay);
-                }
-                throw new Error(`Failed after ${retries} retries`);
+              const response = await fetch(url, options);
+              if (response.status === 404 && i < retries - 1) {
+                // Special handling for Vercel cold starts
+                await new Promise(r => setTimeout(r, delay * (i + 1)));
+                continue;
+              }
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              return response;
             } catch (error) {
-                throw new Error(`Network error: ${error.message}`);
+              if (i === retries - 1) throw error;
+              await new Promise(r => setTimeout(r, delay * (i + 1)));
             }
+          }
         }
         
         async function fetchEnvVars() {
