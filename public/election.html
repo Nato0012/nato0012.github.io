@@ -224,21 +224,38 @@
         // ======================
         // API COMMUNICATION
         // ======================
-        async function fetchWithRetry(url, options = {}, retries = 3, delay = 1000) {
-          for (let attempt = 1; attempt <= retries; attempt++) {
-            try {
-              debug.log(`Attempt ${attempt}/${retries}: ${url}`);
-              const response = await fetch(url, options);
-              
-              if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+        async function fetchEnvVars() {
+          const API_URL = window.location.host.includes('vercel.app')
+            ? '/api/getEnv' 
+            : 'https://nato0012-github-io.vercel.app/api/getEnv';
+        
+          try {
+            const response = await fetch(API_URL, {
+              cache: 'no-store',
+              headers: {
+                'Content-Type': 'application/json'
               }
-              
-              return response;
-            } catch (error) {
-              if (attempt === retries) throw error;
-              await new Promise(r => setTimeout(r, delay * attempt));
+            });
+        
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
             }
+        
+            const data = await response.json();
+            
+            // Fallback to direct URL if first attempt fails
+            if (!data.jsonBinKey && API_URL.startsWith('/')) {
+              return await fetchEnvVars('https://nato0012-github-io.vercel.app/api/getEnv');
+            }
+        
+            return data;
+          } catch (error) {
+            console.error('API fetch failed, using fallback data', error);
+            return {
+              jsonBinKey: "$2a$10$JWVdjWDQdlGdwovaMSTWquF6.zY4ufcdZjxJgyy/9lxC/zaATzJya",
+              donorId: "6829783e8960c979a59be2ed",
+              blocsBin: "682978548a456b7966a022e1"
+            };
           }
         }
         
