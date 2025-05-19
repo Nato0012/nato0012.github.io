@@ -1,4 +1,5 @@
 {
+  "version": 2,
   "routes": [
     {
       "src": "/(.*)",
@@ -6,6 +7,9 @@
       "headers": {
         "Content-Type": "text/html"
       }
-    }
+    },
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/election", "dest": "/election.html" },
+    { "src": "/", "dest": "/election.html" }
   ]
 }
