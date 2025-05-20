@@ -1,6 +1,13 @@
 {
   "routes": [
     {
+      "src": "/\\.(css|js|png|jpg|svg)$",
+      "headers": {
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "Content-Type": "text/css"  // Adjust for .js, .png, etc.
+      }
+    },
+    {
       "src": "/(.*)",
       "dest": "/$1.html",
       "headers": {
