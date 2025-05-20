@@ -1,9 +1,14 @@
 {
   "routes": [
     {
-      "src": "/\\.(css|js|png|jpg|svg)$",
+      "src": "/global.css",
       "headers": {
-        "Cache-Control": "public, max-age=31536000, immutable",
+        "Content-Type": "text/css"
+      }
+    },
+    {
+      "src": "/donors.css",
+      "headers": {
         "Content-Type": "text/css"
       }
     },
