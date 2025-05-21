@@ -48,48 +48,24 @@
 
     <script>
         // ======================
-        // DEBUG SYSTEM
+        // CORE VARIABLES
         // ======================
-        const debug = {
-          panel: document.getElementById('debug-content'),
-          log: (msg) => {
-            const entry = document.createElement('div');
-            entry.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            debug.panel.appendChild(entry);
-            debug.panel.scrollTop = debug.panel.scrollHeight;
-            console.log(msg);
-          },
-          error: (err) => {
-            debug.log(`<span style="color:red">ERROR: ${err.message}</span>`);
-            if (err.stack) debug.log(`<span style="color:red">STACK: ${err.stack}</span>`);
-          }
-        };
+        let JSONBIN_BIN_ID;
+        let JSONBIN_API_KEY;
+        let JSONBIN_URL;
         
-        // Show debug panel immediately
-        document.getElementById('debug-info').style.display = 'block';
-        debug.log("Debug system initialized");
-        
-        // ======================
-        // CORE STATE
-        // ======================
         const electionState = {
-          credentials: {},
-          data: null,
-          status: {
-            initialized: false,
-            apiConnected: false,
-            dataLoaded: false
-          },
-          history: [],
-          active: false,
-          startTime: null,
-          endTime: null,
-          nextUpdateTime: null,
-          updateInterval: null,
-          currentResults: null,
-          trueResults: null
+            data: null,
+            history: [],
+            active: false,
+            startTime: null,
+            endTime: null,
+            nextUpdateTime: null,
+            updateInterval: null,
+            currentResults: null,
+            trueResults: null
         };
-        
+
         // DOM Elements
         const statusEl = document.getElementById('status');
         const demPercentEl = document.getElementById('dem-percent');
@@ -101,124 +77,96 @@
         const nextUpdateEl = document.getElementById('next-update');
         const historyListEl = document.getElementById('history-list');
         const manualUpdateBtn = document.getElementById('manual-update');
-        
-        manualUpdateBtn.addEventListener('click', forceUpdate);
-        
+        const debugPanel = document.getElementById('debug-content');
+
         // ======================
-        // API COMMUNICATION (FIXED)
+        // DEBUG SYSTEM
+        // ======================
+        function debugLog(msg) {
+            const entry = document.createElement('div');
+            entry.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            debugPanel.appendChild(entry);
+            debugPanel.scrollTop = debugPanel.scrollHeight;
+            console.log(msg);
+        }
+
+        function debugError(err) {
+            debugLog(`<span style="color:red">ERROR: ${err.message}</span>`);
+            if (err.stack) debugLog(`<span style="color:red">STACK: ${err.stack}</span>`);
+        }
+
+        // ======================
+        // API COMMUNICATION
         // ======================
         async function fetchEnvVars() {
-          try {
-            // Only use relative path - no hardcoded URLs
-            const response = await fetch('/api/getEnv');
-            if (!response.ok) throw new Error('API failed');
-            return await response.json();
-          } catch (error) {
-            console.error("Configuration loading failed");
-            return { jsonBinKey: null, blocsBin: null };
-          }
+            try {
+                debugLog("Fetching environment variables...");
+                const response = await fetch('/api/getEnv');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                debugLog("API response received");
+                
+                JSONBIN_API_KEY = data.jsonBinKey;
+                JSONBIN_BIN_ID = data.blocsBin;
+                JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+                
+                return {
+                    jsonBinKey: JSONBIN_API_KEY,
+                    blocsBin: JSONBIN_BIN_ID
+                };
+                
+            } catch (error) {
+                debugError(error);
+                showError("Configuration Error", "Service unavailable - please refresh");
+                
+                JSONBIN_API_KEY = null;
+                JSONBIN_BIN_ID = null;
+                JSONBIN_URL = null;
+                
+                return {
+                    jsonBinKey: null,
+                    blocsBin: null
+                };
+            }
         }
-        
-        async function initializeApp() {
-          const config = await fetchEnvVars();
-          
-          if (!config.jsonBinKey) {
-            showError("System configuration failed - please refresh");
-            return;
-          }
-        
+
         async function loadElectionData() {
-          try {
-            debug.log(`Fetching from JSONBin: ${electionState.credentials.blocsBin}`);
-            
-            const response = await fetch(
-              `https://api.jsonbin.io/v3/b/${electionState.credentials.blocsBin}/latest`,
-              {
-                headers: { 'X-Master-Key': electionState.credentials.jsonBinKey }
-              }
-            );
-            
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
+            try {
+                if (!JSONBIN_API_KEY) {
+                    throw new Error("Missing API credentials");
+                }
+                
+                debugLog(`Fetching election data from ${JSONBIN_URL}`);
+                const response = await fetch(JSONBIN_URL, {
+                    headers: { 'X-Master-Key': JSONBIN_API_KEY }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (!data.record?.pa_voter_blocs) {
+                    throw new Error("Invalid data format");
+                }
+                
+                electionState.data = data.record;
+                debugLog(`Loaded ${data.record.pa_voter_blocs.length} voter blocs`);
+                
+            } catch (error) {
+                debugError(error);
+                throw error;
             }
-            
-            const data = await response.json();
-            
-            if (!data.record?.pa_voter_blocs) {
-              throw new Error("Invalid data format - missing voter blocs");
-            }
-            
-            electionState.data = data.record;
-            electionState.status.dataLoaded = true;
-            debug.log(`Loaded ${data.record.pa_voter_blocs.length} voter blocs`);
-            
-            return true;
-          } catch (error) {
-            debug.error(error);
-            throw error;
-          }
         }
-        
-        // ======================
-        // INITIALIZATION (FIXED)
-        // ======================
-        async function initializeApp() {
-          try {
-            debug.log("Starting initialization...");
-            
-            // 1. Load environment variables
-            electionState.credentials = await fetchEnvVars();
-            electionState.status.apiConnected = true;
-            debug.log("API credentials loaded");
-            
-            // 2. Load election data
-            await loadElectionData();
-            electionState.status.dataLoaded = true;
-            debug.log("Election data loaded");
-            
-            // 3. Initialize simulation
-            electionState.status.initialized = true;
-            statusEl.textContent = "Election simulation ready";
-            statusEl.style.color = "green";
-            debug.log("Application initialized successfully");
-            
-            // Initialize election simulation
-            initElection();
-            
-          } catch (error) {
-            statusEl.textContent = "System error - see debug panel";
-            statusEl.style.color = "red";
-            debug.error(error);
-            
-            // Fallback data for demo purposes
-            electionState.data = {
-              pa_voter_blocs: [
-                // Your fallback voter blocs here
-              ]
-            };
-            
-            // Still try to initialize with fallback data
-            initElection();
-          }
-        }
-        
+
         // ======================
         // ELECTION SIMULATION
         // ======================
-        function initElection() {
-          debug.log("Initializing election simulation");
-          
-          // Calculate true results (without margin of error)
-          electionState.trueResults = calculateResults(electionState.data.pa_voter_blocs);
-          debug.log("True results calculated:", electionState.trueResults);
-          
-          // Schedule the election
-          scheduleElection();
-          
-          // Start checking for updates
-          checkForUpdates();
-        }
-        
         function calculateResults(blocs) {
             let dVotes = 0;
             let rVotes = 0;
@@ -241,6 +189,18 @@
                 total_turnout: parseFloat((totalCast * 100).toFixed(1))
             };
         }
+
+        function initElection() {
+            try {
+                debugLog("Initializing election simulation");
+                electionState.trueResults = calculateResults(electionState.data.pa_voter_blocs);
+                scheduleElection();
+                checkForUpdates();
+            } catch (error) {
+                debugError(error);
+                showError("Initialization Error", "Failed to start simulation");
+            }
+        }        
         
         function applyMarginOfError(results, moePercent) {
             const moe = (Math.random() * 2 - 1) * moePercent;
@@ -484,8 +444,48 @@
             setTimeout(checkForUpdates, 60000);
         }
 
+        function showError(title, message) {
+            statusEl.innerHTML = `
+                <strong>${title}</strong><br>
+                ${message}<br>
+                <button onclick="window.location.reload()">Refresh Page</button>
+            `;
+            statusEl.style.color = "red";
+        }
+
+        // ======================
+        // INITIALIZATION
+        // ======================
+        async function initializeApp() {
+            try {
+                document.getElementById('debug-info').style.display = 'block';
+                debugLog("Starting initialization...");
+                
+                // 1. Load configuration
+                statusEl.textContent = "Loading configuration...";
+                await fetchEnvVars();
+                
+                if (!JSONBIN_API_KEY) {
+                    throw new Error("Missing required configuration");
+                }
+                
+                // 2. Load data
+                statusEl.textContent = "Loading election data...";
+                await loadElectionData();
+                
+                // 3. Initialize simulation
+                statusEl.textContent = "Initializing simulation...";
+                initElection();
+                
+            } catch (error) {
+                debugError(error);
+                showError("Initialization Failed", "See debug console for details");
+            }
+        }
+
         // Start the application
         document.addEventListener('DOMContentLoaded', initializeApp);
+        manualUpdateBtn.addEventListener('click', forceUpdate);
     </script>
 </body>
 </html>
