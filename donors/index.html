@@ -35,11 +35,13 @@
     </div>
 
     <script>
-        // Variables will be set after fetching from serverless function
-        let JSONBIN_BIN_ID;
-        let JSONBIN_API_KEY;
-        let JSONBIN_URL;
-        
+        // Configuration
+        let AIRTABLE_CONFIG = {
+            baseId: '',
+            token: '',
+            tableName: 'Donors'
+        };
+
         // Player state
         let currentParty = "Democrat";
         let stamina = 10;
@@ -49,102 +51,157 @@
                 "Republican": []
             }
         };
-        
+
         // Initialize the page
         document.addEventListener('DOMContentLoaded', async function() {
-            // First fetch the environment variables
             await fetchEnvVars();
-            // Then fetch the donors
             await fetchDonors();
             renderDonors(currentParty);
             updateStaminaDisplay();
         });
-        
-        // Fetch environment variables from Vercel serverless function
+
+        // Fetch environment variables from Vercel
         async function fetchEnvVars() {
             try {
                 const response = await fetch('/api/getEnv');
                 const data = await response.json();
-                JSONBIN_BIN_ID = data.donorId;
-                JSONBIN_API_KEY = data.jsonBinKey;
-                JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
-                console.log("Successfully fetched environment variables");
+                AIRTABLE_CONFIG.baseId = data.donorId;
+                AIRTABLE_CONFIG.token = data.donorToken;
+                console.log("Configuration loaded");
             } catch (error) {
-                console.error("Error fetching environment variables:", error);
+                console.error("Error loading configuration:", error);
                 showModal("Configuration Error", "Failed to load configuration. Using fallback values.");
-                // Fallback values (should match your Vercel env vars)
-                JSONBIN_BIN_ID = process.env.DONOR_ID || "default-bin-id";
-                JSONBIN_API_KEY = process.env.JSONBIN_KEY || "default-api-key";
-                JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
             }
         }
-        
-        // Fetch donors from JSONBin.io
+
+        // Fetch donors from Airtable
         async function fetchDonors() {
-            if (!JSONBIN_API_KEY || !JSONBIN_BIN_ID) {
-                console.error("API keys not loaded yet");
-                return;
-            }
-            
             try {
-                const response = await fetch(JSONBIN_URL, {
-                    headers: {
-                        'X-Master-Key': JSONBIN_API_KEY
+                const response = await fetch(`/api/airtableProxy?baseId=${AIRTABLE_CONFIG.baseId}`);
+                const airtableData = await response.json();
+                
+                // Transform Airtable data to match original format
+                donorData = {
+                    donors: {
+                        Democrat: airtableData.records
+                            .filter(record => record.fields.Party === "Democrat")
+                            .map(record => ({
+                                name: record.fields.Name,
+                                type: record.fields.Type,
+                                relationship: record.fields.Relationship || 0,
+                                loves: arrayify(record.fields.Loves),
+                                hates: arrayify(record.fields.Hates),
+                                image: record.fields.Image?.[0]?.url || "placeholder.jpg",
+                                id: record.id
+                            })),
+                        Republican: airtableData.records
+                            .filter(record => record.fields.Party === "Republican")
+                            .map(record => ({
+                                name: record.fields.Name,
+                                type: record.fields.Type,
+                                relationship: record.fields.Relationship || 0,
+                                loves: arrayify(record.fields.Loves),
+                                hates: arrayify(record.fields.Hates),
+                                image: record.fields.Image?.[0]?.url || "placeholder.jpg",
+                                id: record.id
+                            }))
                     }
-                });
-                const data = await response.json();
-                donorData = data.record;
-                console.log("Fetched donor data:", donorData);
+                };
             } catch (error) {
                 console.error("Error fetching donors:", error);
                 showModal("Database Error", "Failed to load donor data. Using fallback data.");
-                // Fallback data if fetch fails
+                
+                // Fallback data structure matches your original
                 donorData = {
-                    "donors": {
-                        "Democrat": [
+                    donors: {
+                        Democrat: [
                             {
-                                "name": "Steven Hobbs",
-                                "type": "Silicon Valley Executive",
-                                "relationship": 75,
-                                "loves": ["Green Energy", "Tech Regulation"],
-                                "hates": ["Tax Increases", "Antitrust Laws"],
-                                "image": "techtitan.jpg"
+                                name: "Steven Hobbs",
+                                type: "Silicon Valley Executive",
+                                relationship: 75,
+                                loves: ["Green Energy", "Tech Regulation"],
+                                hates: ["Tax Increases", "Antitrust Laws"],
+                                image: "techtitan.jpg",
+                                id: "recDemo1"
                             }
                         ],
-                        "Republican": [
+                        Republican: [
                             {
-                                "name": "Jimmy Stonefeller",
-                                "type": "Energy Executive",
-                                "relationship": 80,
-                                "loves": ["Deregulation", "Drilling Rights"],
-                                "hates": ["Carbon Taxes", "Renewable Subsidies"],
-                                "image": "oiltycoon.jpg"
+                                name: "Jimmy Stonefeller",
+                                type: "Energy Executive",
+                                relationship: 80,
+                                loves: ["Deregulation", "Drilling Rights"],
+                                hates: ["Carbon Taxes", "Renewable Subsidies"],
+                                image: "oiltycoon.jpg",
+                                id: "recRep1"
                             }
                         ]
                     }
                 };
             }
         }
-        
-        // [Rest of your existing functions remain exactly the same...]
-        // Save donors to JSONBin.io
+
+        // Save donors to Airtable
         async function saveDonors() {
             try {
-                await fetch(JSONBIN_URL, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Master-Key': JSONBIN_API_KEY
-                    },
-                    body: JSON.stringify(donorData)
+                const updates = [];
+                
+                // Prepare Democrat updates
+                donorData.donors.Democrat.forEach(donor => {
+                    updates.push({
+                        id: donor.id,
+                        fields: {
+                            Name: donor.name,
+                            Type: donor.type,
+                            Relationship: donor.relationship,
+                            Loves: donor.loves,
+                            Hates: donor.hates,
+                            Party: "Democrat"
+                        }
+                    });
                 });
-                console.log("Data saved successfully");
+                
+                // Prepare Republican updates
+                donorData.donors.Republican.forEach(donor => {
+                    updates.push({
+                        id: donor.id,
+                        fields: {
+                            Name: donor.name,
+                            Type: donor.type,
+                            Relationship: donor.relationship,
+                            Loves: donor.loves,
+                            Hates: donor.hates,
+                            Party: "Republican"
+                        }
+                    });
+                });
+                
+                // Send updates to Airtable
+                const response = await fetch('/api/airtableProxy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        baseId: AIRTABLE_CONFIG.baseId,
+                        updates: updates
+                    })
+                });
+                
+                if (!response.ok) throw new Error("Save failed");
+                console.log("Donors saved successfully");
             } catch (error) {
                 console.error("Error saving donors:", error);
                 showModal("Save Error", "Failed to save donor data.");
             }
         }
-        
+
+        // Helper function for multi-select fields
+        function arrayify(value) {
+            if (!value) return [];
+            return Array.isArray(value) ? value : [value];
+        }
+
         // Switch between Democrat and Republican donors
         function switchParty(party) {
             currentParty = party;
@@ -156,7 +213,7 @@
             });
             document.querySelector(`.party-tab:nth-child(${party === 'Democrat' ? 1 : 2})`).classList.add('active');
         }
-        
+
         // Render donor cards for the selected party
         function renderDonors(party) {
             const container = document.getElementById('donor-container');
@@ -190,7 +247,7 @@
                 container.appendChild(card);
             });
         }
-        
+
         // Court a donor (improve relationship)
         async function courtDonor(party, donorName) {
             if (stamina < 1) {
@@ -207,7 +264,7 @@
                 donor.relationship = Math.min(100, donor.relationship + gain);
                 stamina -= 1;
                 updateStaminaDisplay();
-                await saveDonors(); // Save to JSONBin.io
+                await saveDonors();
                 showModal("Success!", `🎩 Success! ${donor.name}'s relationship +${gain}`);
             } else {
                 stamina -= 1;
@@ -217,7 +274,7 @@
             
             renderDonors(currentParty);
         }
-        
+
         // Attack a donor (damage relationship)
         async function attackDonor(party, donorName) {
             if (stamina < 2) {
@@ -234,7 +291,7 @@
                 donor.relationship = Math.max(0, donor.relationship - loss);
                 stamina -= 2;
                 updateStaminaDisplay();
-                await saveDonors(); // Save to JSONBin.io
+                await saveDonors();
                 showModal("Success!", `💥 Success! ${donor.name}'s relationship -${loss}`);
             } else {
                 stamina -= 2;
@@ -244,19 +301,19 @@
             
             renderDonors(currentParty);
         }
-        
+
         // Show modal with result message
         function showModal(title, message) {
             document.getElementById('modal-title').textContent = title;
             document.getElementById('modal-message').innerHTML = message;
             document.getElementById('result-modal').style.display = 'flex';
         }
-        
+
         // Close modal
         function closeModal() {
             document.getElementById('result-modal').style.display = 'none';
         }
-        
+
         // Update stamina display
         function updateStaminaDisplay() {
             document.getElementById('stamina').textContent = stamina;
