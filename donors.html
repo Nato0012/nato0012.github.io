@@ -3,487 +3,264 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Election HQ</title>
-    <link rel="stylesheet" href="global.css?v=1.1">
-    <link rel="stylesheet" href="election.css?v=1.1">
+    <title>The Presidency Awaits - Donors</title>
+    <link rel="stylesheet" href="/global.css?v=1.1">
+    <link rel="stylesheet" href="/donors.css?v=1.1">
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=3">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=3">
+    <link rel="shortcut icon" href="/favicon-32x32.png?v=3" type="image/png">
 </head>
 <body>
-    <div class="election-container">
-        <h1>Pennsylvania Election Simulator</h1>
-        <div class="status" id="status">Initializing...</div>
-        <div class="results">
-            <div class="party democrat">
-                <h2>Democrat</h2>
-                <div class="percentage" id="dem-percent">--%</div>
-                <div id="dem-moe">MOE: ±--%</div>
-            </div>
-            <div class="party republican">
-                <h2>Republican</h2>
-                <div class="percentage" id="rep-percent">--%</div>
-                <div id="rep-moe">MOE: ±--%</div>
-            </div>
-        </div>
-        <div class="turnout">
-            <div>Turnout: <span id="turnout">--</span>% of eligible voters</div>
-        </div>
-        <div class="time-info">
-            <div>Time remaining: <span id="time-remaining">--:--</span></div>
-            <div>Next update at: <span id="next-update">--:--</span> EST</div>
-        </div>
-        <div class="controls">
-            <button id="manual-update">Force Update Now</button>
+    <div class="stamina-display">
+        Stamina: <span id="stamina">10</span>
+    </div>
+
+    <h1>Political Donor Management</h1>
+    
+    <div class="party-tabs">
+        <div class="party-tab active" onclick="switchParty('Democrat')">Democrat Donors</div>
+        <div class="party-tab" onclick="switchParty('Republican')">Republican Donors</div>
+    </div>
+    
+    <div id="donor-container" class="donor-grid">
+        <!-- Donor cards will be inserted here by JavaScript -->
+    </div>
+    
+    <div id="result-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="modal-title">Result</h2>
+            <p id="modal-message">This is a message</p>
+            <button onclick="closeModal()">Close</button>
         </div>
     </div>
-    <div class="election-container history">
-        <h3>Previous Updates</h3>
-        <div id="history-list"></div>
-    </div>
-    <div id="debug-info">
-        <h3 style="margin-top:0;">Debug Console</h3>
-        <div id="debug-content"></div>
-    </div>
-    <button id="debug-toggle" onclick="document.getElementById('debug-info').style.display='none'">Hide Debug</button>
 
     <script>
-        // ======================
-        // DEBUG SYSTEM
-        // ======================
-        const debug = {
-          panel: document.getElementById('debug-content'),
-          log: (msg) => {
-            const entry = document.createElement('div');
-            entry.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            debug.panel.appendChild(entry);
-            debug.panel.scrollTop = debug.panel.scrollHeight;
-            console.log(msg);
-          },
-          error: (err) => {
-            debug.log(`<span style="color:red">ERROR: ${err.message}</span>`);
-            if (err.stack) debug.log(`<span style="color:red">STACK: ${err.stack}</span>`);
-          }
+        // Variables will be set after fetching from serverless function
+        let JSONBIN_BIN_ID;
+        let JSONBIN_API_KEY;
+        let JSONBIN_URL;
+        
+        // Player state
+        let currentParty = "Democrat";
+        let stamina = 10;
+        let donorData = {
+            "donors": {
+                "Democrat": [],
+                "Republican": []
+            }
         };
         
-        // Show debug panel immediately
-        document.getElementById('debug-info').style.display = 'block';
-        debug.log("Debug system initialized");
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', async function() {
+            // First fetch the environment variables
+            await fetchEnvVars();
+            // Then fetch the donors
+            await fetchDonors();
+            renderDonors(currentParty);
+            updateStaminaDisplay();
+        });
         
-        // ======================
-        // CORE STATE
-        // ======================
-        const electionState = {
-          credentials: {},
-          data: null,
-          status: {
-            initialized: false,
-            apiConnected: false,
-            dataLoaded: false
-          },
-          history: [],
-          active: false,
-          startTime: null,
-          endTime: null,
-          nextUpdateTime: null,
-          updateInterval: null,
-          currentResults: null,
-          trueResults: null
-        };
-        
-        // DOM Elements
-        const statusEl = document.getElementById('status');
-        const demPercentEl = document.getElementById('dem-percent');
-        const repPercentEl = document.getElementById('rep-percent');
-        const demMoeEl = document.getElementById('dem-moe');
-        const repMoeEl = document.getElementById('rep-moe');
-        const turnoutEl = document.getElementById('turnout');
-        const timeRemainingEl = document.getElementById('time-remaining');
-        const nextUpdateEl = document.getElementById('next-update');
-        const historyListEl = document.getElementById('history-list');
-        const manualUpdateBtn = document.getElementById('manual-update');
-        
-        manualUpdateBtn.addEventListener('click', forceUpdate);
-        
-        // ======================
-        // API COMMUNICATION (FIXED)
-        // ======================
+        // Fetch environment variables from Vercel serverless function
         async function fetchEnvVars() {
-          try {
-            const response = await fetch('/api/getEnv');
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
-            }
-            return await response.json();
-          } catch (error) {
-            debug.error(error);
-            // Fallback values - replace with your actual fallback values
-            return {
-              jsonBinKey: "$2a$10$JWVdjWDQdlGdwovaMSTWquF6.zY4ufcdZjxJgyy/9lxC/zaATzJya",
-              donorId: "6829783e8960c979a59be2ed",
-              blocsBin: "682978548a456b7966a022e1"
-            };
-          }
-        }
-        
-        async function loadElectionData() {
-          try {
-            debug.log(`Fetching from JSONBin: ${electionState.credentials.blocsBin}`);
-            
-            const response = await fetch(
-              `https://api.jsonbin.io/v3/b/${electionState.credentials.blocsBin}/latest`,
-              {
-                headers: { 'X-Master-Key': electionState.credentials.jsonBinKey }
-              }
-            );
-            
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
-            }
-            
-            const data = await response.json();
-            
-            if (!data.record?.pa_voter_blocs) {
-              throw new Error("Invalid data format - missing voter blocs");
-            }
-            
-            electionState.data = data.record;
-            electionState.status.dataLoaded = true;
-            debug.log(`Loaded ${data.record.pa_voter_blocs.length} voter blocs`);
-            
-            return true;
-          } catch (error) {
-            debug.error(error);
-            throw error;
-          }
-        }
-        
-        // ======================
-        // INITIALIZATION (FIXED)
-        // ======================
-        async function initializeApp() {
-          try {
-            debug.log("Starting initialization...");
-            
-            // 1. Load environment variables
-            electionState.credentials = await fetchEnvVars();
-            electionState.status.apiConnected = true;
-            debug.log("API credentials loaded");
-            
-            // 2. Load election data
-            await loadElectionData();
-            electionState.status.dataLoaded = true;
-            debug.log("Election data loaded");
-            
-            // 3. Initialize simulation
-            electionState.status.initialized = true;
-            statusEl.textContent = "Election simulation ready";
-            statusEl.style.color = "green";
-            debug.log("Application initialized successfully");
-            
-            // Initialize election simulation
-            initElection();
-            
-          } catch (error) {
-            statusEl.textContent = "System error - see debug panel";
-            statusEl.style.color = "red";
-            debug.error(error);
-            
-            // Fallback data for demo purposes
-            electionState.data = {
-              pa_voter_blocs: [
-                // Your fallback voter blocs here
-              ]
-            };
-            
-            // Still try to initialize with fallback data
-            initElection();
-          }
-        }
-        
-        // ======================
-        // ELECTION SIMULATION
-        // ======================
-        function initElection() {
-          debug.log("Initializing election simulation");
-          
-          // Calculate true results (without margin of error)
-          electionState.trueResults = calculateResults(electionState.data.pa_voter_blocs);
-          debug.log("True results calculated:", electionState.trueResults);
-          
-          // Schedule the election
-          scheduleElection();
-          
-          // Start checking for updates
-          checkForUpdates();
-        }
-        
-        function calculateResults(blocs) {
-            let dVotes = 0;
-            let rVotes = 0;
-            
-            for (const bloc of blocs) {
-                const dShare = (50 + bloc.base_lean) * bloc.size * bloc.turnout_factor / 100;
-                const rShare = (50 - bloc.base_lean) * bloc.size * bloc.turnout_factor / 100;
-                dVotes += dShare;
-                rVotes += rShare;
-            }
-            
-            const totalCast = dVotes + rVotes;
-            if (totalCast === 0) {
-                return { D: 0, R: 0, total_turnout: 0 };
-            }
-            
-            return {
-                D: parseFloat((dVotes / totalCast * 100).toFixed(1)),
-                R: parseFloat((rVotes / totalCast * 100).toFixed(1)),
-                total_turnout: parseFloat((totalCast * 100).toFixed(1))
-            };
-        }
-        
-        function applyMarginOfError(results, moePercent) {
-            const moe = (Math.random() * 2 - 1) * moePercent;
-            let dResult = results.D + moe;
-            let rResult = results.R - moe;
-            
-            dResult = Math.max(0, Math.min(100, dResult));
-            rResult = Math.max(0, Math.min(100, rResult));
-            
-            const total = dResult + rResult;
-            if (total > 0) {
-                dResult = parseFloat((dResult / total * 100).toFixed(1));
-                rResult = parseFloat((rResult / total * 100).toFixed(1));
-            }
-            
-            return {
-                D: dResult,
-                R: rResult,
-                total_turnout: results.total_turnout,
-                moe: parseFloat(moePercent.toFixed(1))
-            };
-        }
-        
-        function scheduleElection() {
-            const now = new Date();
-            const estOffset = -5 * 60 * 60 * 1000;
-            const nowEST = new Date(now.getTime() + estOffset);
-            
-            let nextElectionStart = new Date(nowEST);
-            nextElectionStart.setHours(6, 30, 0, 0);
-            
-            if (nowEST > nextElectionStart) {
-                nextElectionStart.setDate(nextElectionStart.getDate() + 1);
-            }
-            
-            const localStartTime = new Date(nextElectionStart.getTime() - estOffset);
-            const electionEndTime = new Date(localStartTime.getTime() + (47 * 60 * 60 * 1000) + (45 * 60 * 1000));
-            
-            electionState.startTime = localStartTime;
-            electionState.endTime = electionEndTime;
-            
-            if (now >= localStartTime && now <= electionEndTime) {
-                startElection();
-            } else {
-                const timeUntilStart = localStartTime - now;
-                statusEl.textContent = `Next election starts at ${formatTime(localStartTime)}`;
-                setTimeout(startElection, timeUntilStart);
+            try {
+                const response = await fetch('/api/getEnv');
+                const data = await response.json();
+                JSONBIN_BIN_ID = data.donorId;
+                JSONBIN_API_KEY = data.jsonBinKey;
+                JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+                console.log("Successfully fetched environment variables");
+            } catch (error) {
+                console.error("Error fetching environment variables:", error);
+                showModal("Configuration Error", "Failed to load configuration. Using fallback values.");
+                // Fallback values (should match your Vercel env vars)
+                JSONBIN_BIN_ID = process.env.DONOR_ID || "default-bin-id";
+                JSONBIN_API_KEY = process.env.JSONBIN_KEY || "default-api-key";
+                JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
             }
         }
         
-        function startElection() {
-            electionState.active = true;
-            electionState.history = [];
-            electionState.currentResults = applyMarginOfError(electionState.trueResults, 2.0);
-            
-            updateDisplay();
-            logHistoryUpdate();
-            scheduleNextUpdate();
-            
-            statusEl.textContent = "Election in progress";
-            statusEl.className = "status leading-" + (electionState.currentResults.D > electionState.currentResults.R ? "dem" : "rep");
-        }
-        
-        function endElection() {
-            electionState.active = false;
-            electionState.currentResults = {
-                ...electionState.trueResults,
-                moe: 0.0
-            };
-            
-            updateDisplay();
-            logHistoryUpdate();
-            
-            statusEl.textContent = "FINAL RESULTS: " + 
-                (electionState.currentResults.D > electionState.currentResults.R ? "DEMOCRAT WINS" : "REPUBLICAN WINS");
-            statusEl.className = "status final";
-            
-            scheduleElection();
-        }
-        
-        function scheduleNextUpdate() {
-            if (!electionState.active) return;
-            
-            const now = new Date();
-            const timeRemaining = electionState.endTime - now;
-            
-            if (timeRemaining <= 0) {
-                endElection();
+        // Fetch donors from JSONBin.io
+        async function fetchDonors() {
+            if (!JSONBIN_API_KEY || !JSONBIN_BIN_ID) {
+                console.error("API keys not loaded yet");
                 return;
             }
             
-            const minutes = now.getMinutes();
-            let nextUpdate;
-            
-            if (timeRemaining <= 60 * 60 * 1000) {
-                if (minutes < 45) {
-                    if (minutes < 30) {
-                        nextUpdate = new Date(now);
-                        nextUpdate.setMinutes(30, 0, 0);
-                    } else {
-                        nextUpdate = new Date(now);
-                        nextUpdate.setMinutes(45, 0, 0);
+            try {
+                const response = await fetch(JSONBIN_URL, {
+                    headers: {
+                        'X-Master-Key': JSONBIN_API_KEY
                     }
-                } else {
-                    nextUpdate = new Date(now);
-                    nextUpdate.setHours(now.getHours() + 1);
-                    nextUpdate.setMinutes(0, 0, 0);
-                }
-            } else {
-                nextUpdate = new Date(now);
-                if (minutes < 30) {
-                    nextUpdate.setMinutes(30, 0, 0);
-                } else {
-                    nextUpdate.setHours(now.getHours() + 1);
-                    nextUpdate.setMinutes(0, 0, 0);
-                }
-            }
-            
-            if (nextUpdate > electionState.endTime) {
-                nextUpdate = new Date(electionState.endTime);
-            }
-            
-            electionState.nextUpdateTime = nextUpdate;
-            updateDisplay();
-            
-            clearTimeout(electionState.updateInterval);
-            electionState.updateInterval = setTimeout(performUpdate, nextUpdate - now);
-        }
-        
-        function performUpdate() {
-            if (!electionState.active) return;
-            
-            const now = new Date();
-            const timeRemaining = electionState.endTime - now;
-            const totalElectionTime = electionState.endTime - electionState.startTime;
-            const elapsedTime = now - electionState.startTime;
-            const moePercent = 2.0 * (1 - elapsedTime / totalElectionTime);
-            
-            electionState.currentResults = applyMarginOfError(electionState.trueResults, moePercent);
-            
-            updateDisplay();
-            logHistoryUpdate();
-            
-            if (now >= electionState.endTime) {
-                endElection();
-            } else {
-                scheduleNextUpdate();
+                });
+                const data = await response.json();
+                donorData = data.record;
+                console.log("Fetched donor data:", donorData);
+            } catch (error) {
+                console.error("Error fetching donors:", error);
+                showModal("Database Error", "Failed to load donor data. Using fallback data.");
+                // Fallback data if fetch fails
+                donorData = {
+                    "donors": {
+                        "Democrat": [
+                            {
+                                "name": "Steven Hobbs",
+                                "type": "Silicon Valley Executive",
+                                "relationship": 75,
+                                "loves": ["Green Energy", "Tech Regulation"],
+                                "hates": ["Tax Increases", "Antitrust Laws"],
+                                "image": "techtitan.jpg"
+                            }
+                        ],
+                        "Republican": [
+                            {
+                                "name": "Jimmy Stonefeller",
+                                "type": "Energy Executive",
+                                "relationship": 80,
+                                "loves": ["Deregulation", "Drilling Rights"],
+                                "hates": ["Carbon Taxes", "Renewable Subsidies"],
+                                "image": "oiltycoon.jpg"
+                            }
+                        ]
+                    }
+                };
             }
         }
         
-        function forceUpdate() {
-            if (electionState.active) {
-                performUpdate();
+        // [Rest of your existing functions remain exactly the same...]
+        // Save donors to JSONBin.io
+        async function saveDonors() {
+            try {
+                await fetch(JSONBIN_URL, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Key': JSONBIN_API_KEY
+                    },
+                    body: JSON.stringify(donorData)
+                });
+                console.log("Data saved successfully");
+            } catch (error) {
+                console.error("Error saving donors:", error);
+                showModal("Save Error", "Failed to save donor data.");
             }
         }
         
-        function updateDisplay() {
-            if (!electionState.currentResults) return;
+        // Switch between Democrat and Republican donors
+        function switchParty(party) {
+            currentParty = party;
+            renderDonors(party);
             
-            const results = electionState.currentResults;
-            const isFinal = !electionState.active;
-            
-            demPercentEl.textContent = results.D + "%";
-            repPercentEl.textContent = results.R + "%";
-            demMoeEl.textContent = "MOE: ±" + results.moe + "%";
-            repMoeEl.textContent = "MOE: ±" + results.moe + "%";
-            turnoutEl.textContent = results.total_turnout;
-            
-            if (isFinal) {
-                statusEl.textContent = "FINAL RESULTS: " + 
-                    (results.D > results.R ? "DEMOCRAT WINS" : "REPUBLICAN WINS");
-                statusEl.className = "status final";
-            } else {
-                statusEl.textContent = results.D > results.R ? "Democrat Leading" : "Republican Leading";
-                statusEl.className = "status leading-" + (results.D > results.R ? "dem" : "rep");
-            }
-            
-            if (electionState.active) {
-                const remainingMs = electionState.endTime - new Date();
-                const hours = Math.floor(remainingMs / (1000 * 60 * 60));
-                const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
-                timeRemainingEl.textContent = `${hours}h ${minutes}m`;
-                
-                if (electionState.nextUpdateTime) {
-                    nextUpdateEl.textContent = formatTime(electionState.nextUpdateTime);
-                }
-            } else {
-                timeRemainingEl.textContent = "Election ended";
-                nextUpdateEl.textContent = "N/A";
-            }
-        }
-        
-        function logHistoryUpdate() {
-            if (!electionState.currentResults) return;
-            
-            const now = new Date();
-            const results = electionState.currentResults;
-            const isFinal = !electionState.active;
-            
-            electionState.history.unshift({
-                time: now,
-                results: { ...results },
-                isFinal: isFinal
+            // Update tab styles
+            document.querySelectorAll('.party-tab').forEach(tab => {
+                tab.classList.remove('active');
             });
-            
-            renderHistory();
+            document.querySelector(`.party-tab:nth-child(${party === 'Democrat' ? 1 : 2})`).classList.add('active');
         }
         
-        function renderHistory() {
-            historyListEl.innerHTML = '';
+        // Render donor cards for the selected party
+        function renderDonors(party) {
+            const container = document.getElementById('donor-container');
+            container.innerHTML = '';
             
-            for (const item of electionState.history.slice(0, 10)) {
-                const itemEl = document.createElement('div');
-                itemEl.className = 'history-item';
+            donorData.donors[party].forEach(donor => {
+                const hourly = Math.floor(500 * (1 + (donor.relationship / 10)));
                 
-                const timeStr = formatTime(item.time);
-                const leader = item.results.D > item.results.R ? "DEM" : "GOP";
-                const margin = Math.abs(item.results.D - item.results.R).toFixed(1);
-                
-                itemEl.innerHTML = `
-                    <div><strong>${timeStr}</strong> ${item.isFinal ? '(FINAL)' : ''}</div>
-                    <div>${leader} +${margin}% (D ${item.results.D}% - R ${item.results.R}%)</div>
-                    <div>Turnout: ${item.results.total_turnout}% • MOE: ±${item.results.moe}%</div>
+                const card = document.createElement('div');
+                card.className = 'donor-card';
+                card.innerHTML = `
+                    <img src="${donor.image}" alt="${donor.name}" class="donor-image" onerror="this.src='https://via.placeholder.com/300x200?text=Donor+Image'">
+                    <div class="donor-info">
+                        <div class="donor-name">${donor.name}</div>
+                        <div class="donor-type">${donor.type}</div>
+                        <div class="donor-stats">
+                            Relationship: ${donor.relationship}/100<br>
+                            Hourly Donation: $${hourly.toLocaleString()}
+                        </div>
+                        <div class="donor-likes">
+                            <strong>Loves:</strong> ${donor.loves.join(', ')}<br>
+                            <strong>Hates:</strong> ${donor.hates.join(', ')}
+                        </div>
+                        <div class="donor-buttons">
+                            <button class="btn btn-court" onclick="courtDonor('${party}', '${donor.name}')">Court (-1 Stamina)</button>
+                            <button class="btn btn-attack" onclick="attackDonor('${party}', '${donor.name}')">Attack (-2 Stamina)</button>
+                        </div>
+                    </div>
                 `;
                 
-                historyListEl.appendChild(itemEl);
+                container.appendChild(card);
+            });
+        }
+        
+        // Court a donor (improve relationship)
+        async function courtDonor(party, donorName) {
+            if (stamina < 1) {
+                showModal("Not Enough Stamina", "❌ You don't have enough stamina! (Need 1)");
+                return;
             }
+            
+            const donor = donorData.donors[party].find(d => d.name === donorName);
+            const successRate = 50 + Math.floor(donor.relationship / 2);
+            const roll = Math.floor(Math.random() * 100) + 1;
+            
+            if (roll <= successRate) {
+                const gain = 10;
+                donor.relationship = Math.min(100, donor.relationship + gain);
+                stamina -= 1;
+                updateStaminaDisplay();
+                await saveDonors(); // Save to JSONBin.io
+                showModal("Success!", `🎩 Success! ${donor.name}'s relationship +${gain}`);
+            } else {
+                stamina -= 1;
+                updateStaminaDisplay();
+                showModal("Rejected", `💔 ${donor.name} rejected your advances!`);
+            }
+            
+            renderDonors(currentParty);
         }
         
-        function formatTime(date) {
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        // Attack a donor (damage relationship)
+        async function attackDonor(party, donorName) {
+            if (stamina < 2) {
+                showModal("Not Enough Stamina", "❌ You don't have enough stamina! (Need 2)");
+                return;
+            }
+            
+            const donor = donorData.donors[party].find(d => d.name === donorName);
+            const successRate = 50;
+            const roll = Math.floor(Math.random() * 100) + 1;
+            
+            if (roll <= successRate) {
+                const loss = 5;
+                donor.relationship = Math.max(0, donor.relationship - loss);
+                stamina -= 2;
+                updateStaminaDisplay();
+                await saveDonors(); // Save to JSONBin.io
+                showModal("Success!", `💥 Success! ${donor.name}'s relationship -${loss}`);
+            } else {
+                stamina -= 2;
+                updateStaminaDisplay();
+                showModal("Resisted", `🛡️ ${donor.name} resisted your attack!`);
+            }
+            
+            renderDonors(currentParty);
         }
         
-        function checkForUpdates() {
-            if (electionState.active) {
-                const now = new Date();
-                if (now >= electionState.nextUpdateTime) {
-                    performUpdate();
-                }
-            }           
-            setTimeout(checkForUpdates, 60000);
+        // Show modal with result message
+        function showModal(title, message) {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-message').innerHTML = message;
+            document.getElementById('result-modal').style.display = 'flex';
         }
-
-        // Start the application
-        document.addEventListener('DOMContentLoaded', initializeApp);
+        
+        // Close modal
+        function closeModal() {
+            document.getElementById('result-modal').style.display = 'none';
+        }
+        
+        // Update stamina display
+        function updateStaminaDisplay() {
+            document.getElementById('stamina').textContent = stamina;
+        }
     </script>
 </body>
 </html>
