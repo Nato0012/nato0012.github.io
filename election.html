@@ -116,11 +116,6 @@
             return await response.json();
           } catch (error) {
             debug.error(error);
-            // Fallback values - replace with your actual fallback values
-            return {
-              jsonBinKey: "$2a$10$JWVdjWDQdlGdwovaMSTWquF6.zY4ufcdZjxJgyy/9lxC/zaATzJya",
-              donorId: "6829783e8960c979a59be2ed",
-              blocsBin: "682978548a456b7966a022e1"
             };
           }
         }
