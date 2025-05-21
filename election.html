@@ -47,6 +47,9 @@
     <button id="debug-toggle" onclick="document.getElementById('debug-info').style.display='none'">Hide Debug</button>
 
     <script>
+        // ======================
+        // DEBUG SYSTEM
+        // ======================
         const debug = {
           panel: document.getElementById('debug-content'),
           log: (msg) => {
@@ -67,7 +70,7 @@
         debug.log("Debug system initialized");
         
         // ======================
-        // CORE FUNCTIONALITY
+        // CORE STATE
         // ======================
         const electionState = {
           credentials: {},
@@ -76,55 +79,44 @@
             initialized: false,
             apiConnected: false,
             dataLoaded: false
-          }
+          },
+          history: [],
+          active: false,
+          startTime: null,
+          endTime: null,
+          nextUpdateTime: null,
+          updateInterval: null,
+          currentResults: null,
+          trueResults: null
         };
         
         // DOM Elements
         const statusEl = document.getElementById('status');
-        const initStatusEl = document.createElement('div');
-        initStatusEl.style.cssText = `
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          background: #333;
-          color: white;
-          padding: 10px;
-          z-index: 9999;
-          font-family: monospace;
-        `;
-        document.body.prepend(initStatusEl);
+        const demPercentEl = document.getElementById('dem-percent');
+        const repPercentEl = document.getElementById('rep-percent');
+        const demMoeEl = document.getElementById('dem-moe');
+        const repMoeEl = document.getElementById('rep-moe');
+        const turnoutEl = document.getElementById('turnout');
+        const timeRemainingEl = document.getElementById('time-remaining');
+        const nextUpdateEl = document.getElementById('next-update');
+        const historyListEl = document.getElementById('history-list');
+        const manualUpdateBtn = document.getElementById('manual-update');
+        
+        manualUpdateBtn.addEventListener('click', forceUpdate);
         
         // ======================
-        // API COMMUNICATION
+        // API COMMUNICATION (FIXED)
         // ======================
         async function fetchEnvVars() {
-          const API_URL = window.location.host.includes('vercel.app')
-            ? '/api/getEnv' 
-            : 'https://nato0012-github-io.vercel.app/api/getEnv';
-        
           try {
-            const response = await fetch(API_URL, {
-              cache: 'no-store',
-              headers: {
-                'Content-Type': 'application/json'
-              }
-            });
-        
+            const response = await fetch('/api/getEnv');
             if (!response.ok) {
               throw new Error(`HTTP ${response.status}`);
             }
-        
-            const data = await response.json();
-            
-            // Fallback to direct URL if first attempt fails
-            if (!data.jsonBinKey && API_URL.startsWith('/')) {
-              return await fetchEnvVars('https://nato0012-github-io.vercel.app/api/getEnv');
-            }
-        
-            return data;
+            return await response.json();
           } catch (error) {
-            console.error('API fetch failed, using fallback data', error);
+            debug.error(error);
+            // Fallback values - replace with your actual fallback values
             return {
               jsonBinKey: "$2a$10$JWVdjWDQdlGdwovaMSTWquF6.zY4ufcdZjxJgyy/9lxC/zaATzJya",
               donorId: "6829783e8960c979a59be2ed",
@@ -133,49 +125,22 @@
           }
         }
         
-        async function loadConfiguration() {
-          try {
-            initStatusEl.textContent = "🔄 Connecting to API...";
-            debug.log("Fetching environment variables");
-            
-            const response = await fetchWithRetry('/api/getEnv', {
-              headers: { 'Accept': 'application/json' }
-            });
-            
-            const data = await response.json();
-            debug.log("API Response:", JSON.stringify(data));
-            
-            if (!data.jsonBinKey || !data.blocsBin) {
-              throw new Error("Invalid API response - missing required fields");
-            }
-            
-            electionState.credentials = data;
-            electionState.status.apiConnected = true;
-            initStatusEl.textContent = "✅ API Connected";
-            debug.log("Configuration loaded successfully");
-            
-            return true;
-          } catch (error) {
-            initStatusEl.textContent = "❌ API Connection Failed";
-            debug.error(error);
-            throw error;
-          }
-        }
-        
         async function loadElectionData() {
           try {
-            initStatusEl.textContent = "🔄 Loading election data...";
             debug.log(`Fetching from JSONBin: ${electionState.credentials.blocsBin}`);
             
-            const response = await fetchWithRetry(
+            const response = await fetch(
               `https://api.jsonbin.io/v3/b/${electionState.credentials.blocsBin}/latest`,
               {
                 headers: { 'X-Master-Key': electionState.credentials.jsonBinKey }
               }
             );
             
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+            
             const data = await response.json();
-            debug.log("Election data received");
             
             if (!data.record?.pa_voter_blocs) {
               throw new Error("Invalid data format - missing voter blocs");
@@ -183,58 +148,74 @@
             
             electionState.data = data.record;
             electionState.status.dataLoaded = true;
-            initStatusEl.textContent = "✅ Data Loaded";
             debug.log(`Loaded ${data.record.pa_voter_blocs.length} voter blocs`);
             
             return true;
           } catch (error) {
-            initStatusEl.textContent = "❌ Data Loading Failed";
             debug.error(error);
             throw error;
           }
         }
         
         // ======================
-        // INITIALIZATION
+        // INITIALIZATION (FIXED)
         // ======================
         async function initializeApp() {
           try {
-            // Phase 1: Load configuration
-            await loadConfiguration();
+            debug.log("Starting initialization...");
             
-            // Phase 2: Load data
+            // 1. Load environment variables
+            electionState.credentials = await fetchEnvVars();
+            electionState.status.apiConnected = true;
+            debug.log("API credentials loaded");
+            
+            // 2. Load election data
             await loadElectionData();
+            electionState.status.dataLoaded = true;
+            debug.log("Election data loaded");
             
-            // Phase 3: Start simulation
-            initStatusEl.textContent = "🚀 Starting election simulation...";
-            debug.log("Initializing election simulation");
-            
-            // Initialize your election simulation here
+            // 3. Initialize simulation
             electionState.status.initialized = true;
-            initStatusEl.textContent = "✅ System Ready";
             statusEl.textContent = "Election simulation ready";
             statusEl.style.color = "green";
-            
             debug.log("Application initialized successfully");
             
-            // Now call your existing initElection() function
+            // Initialize election simulation
             initElection();
             
           } catch (error) {
-            initStatusEl.textContent = "❌ Initialization Failed";
             statusEl.textContent = "System error - see debug panel";
             statusEl.style.color = "red";
             debug.error(error);
             
             // Fallback data for demo purposes
             electionState.data = {
-              pa_voter_blocs: [] // Your fallback data here
+              pa_voter_blocs: [
+                // Your fallback voter blocs here
+              ]
             };
+            
+            // Still try to initialize with fallback data
+            initElection();
           }
         }
         
-        // Start the application
-        document.addEventListener('DOMContentLoaded', initializeApp);
+        // ======================
+        // ELECTION SIMULATION
+        // ======================
+        function initElection() {
+          debug.log("Initializing election simulation");
+          
+          // Calculate true results (without margin of error)
+          electionState.trueResults = calculateResults(electionState.data.pa_voter_blocs);
+          debug.log("True results calculated:", electionState.trueResults);
+          
+          // Schedule the election
+          scheduleElection();
+          
+          // Start checking for updates
+          checkForUpdates();
+        }
         
         function calculateResults(blocs) {
             let dVotes = 0;
@@ -500,6 +481,9 @@
             }           
             setTimeout(checkForUpdates, 60000);
         }
+
+        // Start the application
+        document.addEventListener('DOMContentLoaded', initializeApp);
     </script>
 </body>
 </html>
