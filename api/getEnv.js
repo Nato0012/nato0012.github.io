@@ -5,7 +5,7 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate');
   
   res.json({
-    jsonBinKey: process.env.JSONBIN_KEY,
+    donorToken: process.env.DONOR_TOKEN,
     donorId: process.env.DONOR_ID,
     blocsBin: process.env.BLOCS_BIN
   });
