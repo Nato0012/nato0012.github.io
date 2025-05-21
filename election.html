@@ -109,16 +109,23 @@
         // ======================
         async function fetchEnvVars() {
           try {
+            // Only use relative path - no hardcoded URLs
             const response = await fetch('/api/getEnv');
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
-            }
+            if (!response.ok) throw new Error('API failed');
             return await response.json();
           } catch (error) {
-            debug.error(error);
-            };
+            console.error("Configuration loading failed");
+            return { jsonBinKey: null, blocsBin: null };
           }
         }
+        
+        async function initializeApp() {
+          const config = await fetchEnvVars();
+          
+          if (!config.jsonBinKey) {
+            showError("System configuration failed - please refresh");
+            return;
+          }
         
         async function loadElectionData() {
           try {
