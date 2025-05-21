@@ -230,7 +230,7 @@
             const nowEST = new Date(now.getTime() + estOffset);
             
             let nextElectionStart = new Date(nowEST);
-            nextElectionStart.setHours(0, 45, 0, 0);
+            nextElectionStart.setHours(0, 0, 0, 0);
             
             if (nowEST > nextElectionStart) {
                 nextElectionStart.setDate(nextElectionStart.getDate() + 1);
