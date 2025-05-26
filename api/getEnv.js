@@ -7,6 +7,8 @@ export default async function handler(req, res) {
   res.json({
     donorToken: process.env.DONOR_TOKEN,
     donorId: process.env.DONOR_ID,
-    blocsBin: process.env.BLOCS_BIN
+    donorTable: process.env.DONOR_TABLE,
+    donorView: process.env.DONOR_VIEW,
+    blocsBin: process.env.BLOCS_BIN  // Not used for Airtable
   });
 }
