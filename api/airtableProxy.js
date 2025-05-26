@@ -1,52 +1,78 @@
 export default async function handler(req, res) {
   const token = process.env.DONOR_TOKEN;
-  
+  const baseId = process.env.DONOR_ID;
+  const tableId = process.env.DONOR_TABLE;
+  const viewId = process.env.DONOR_VIEW;
+
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate');
+  res.setHeader('Cache-Control', 'no-cache');
 
   try {
-    // GET request - fetch all records
+    // Verify all required environment variables
+    if (!token) throw new Error("Missing Airtable token");
+    if (!baseId) throw new Error("Missing base ID");
+    if (!tableId) throw new Error("Missing table ID");
+    
+    // GET request - fetch records
     if (req.method === 'GET') {
-      const { baseId } = req.query;
-      const response = await fetch(`https://api.airtable.com/v0/${baseId}/Donors`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const url = new URL(`https://api.airtable.com/v0/${baseId}/${tableId}`);
+      if (viewId) url.searchParams.append('view', viewId);
+      url.searchParams.append('maxRecords', '100');
       
-      if (!response.ok) throw new Error(`Airtable error: ${response.status}`);
+      const response = await fetch(url, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || `Airtable error: ${response.status}`);
+      }
+
       const data = await response.json();
       return res.status(200).json(data);
     }
-    
-    // POST request - batch update
+
+    // POST request - update records
     if (req.method === 'POST') {
-      const { baseId, updates } = req.body;
+      const { updates } = req.body;
       
-      // Process updates in batches of 10 (Airtable limit)
-      for (let i = 0; i < updates.length; i += 10) {
-        const batch = updates.slice(i, i + 10);
-        const response = await fetch(`https://api.airtable.com/v0/${baseId}/Donors`, {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            records: batch.map(update => ({
-              id: update.id,
-              fields: update.fields
-            }))
-          })
-        });
-        
-        if (!response.ok) throw new Error(`Batch ${i} failed`);
+      const response = await fetch(`https://api.airtable.com/v0/${baseId}/${tableId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          records: updates.map(update => ({
+            id: update.id,
+            fields: update.fields
+          }))
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || `Update failed: ${response.status}`);
       }
-      
-      return res.status(200).json({ success: true });
+
+      const data = await response.json();
+      return res.status(200).json(data);
     }
-    
+
     throw new Error('Method not allowed');
   } catch (error) {
-    console.error('Proxy error:', error);
-    return res.status(500).json({ error: error.message });
+    console.error("Airtable proxy error:", error);
+    return res.status(500).json({ 
+      error: error.message,
+      details: {
+        baseId,
+        tableId,
+        viewId,
+        hasToken: !!token
+      }
+    });
   }
 }
