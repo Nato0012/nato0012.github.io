@@ -8,16 +8,19 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-cache');
 
   try {
-    // Verify all required environment variables
-    if (!token) throw new Error("Missing Airtable token in environment");
-    if (!baseId) throw new Error("Missing base ID in environment");
-    if (!tableId) throw new Error("Missing table ID in environment");
+    // Verify configuration
+    const missing = [];
+    if (!token) missing.push("DONOR_TOKEN");
+    if (!baseId) missing.push("DONOR_ID");
+    if (!tableId) missing.push("DONOR_TABLE");
+    if (missing.length) {
+      throw new Error(`Missing environment variables: ${missing.join(", ")}`);
+    }
 
     // GET request - fetch records
     if (req.method === 'GET') {
       const url = new URL(`https://api.airtable.com/v0/${baseId}/${tableId}`);
       if (viewId) url.searchParams.append('view', viewId);
-      url.searchParams.append('maxRecords', '100');
       
       const response = await fetch(url, {
         headers: { 
@@ -28,17 +31,23 @@ export default async function handler(req, res) {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error?.message || `Airtable API error: ${response.status}`);
+        console.error("Airtable API Error:", {
+          status: response.status,
+          error: error
+        });
+        throw new Error(error.error?.message || `Airtable error: ${response.status}`);
       }
 
       const data = await response.json();
-      return res.status(200).json(data);
+      return res.status(200).json({
+        success: true,
+        records: data.records || []
+      });
     }
 
     // POST request - update records
     if (req.method === 'POST') {
       const { updates } = req.body;
-      
       const response = await fetch(`https://api.airtable.com/v0/${baseId}/${tableId}`, {
         method: 'PATCH',
         headers: {
@@ -48,14 +57,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           records: updates.map(update => ({
             id: update.id,
-            fields: {
-              Name: update.fields.Name,
-              Type: update.fields.Type,
-              Relationship: update.fields.Relationship,
-              Loves: update.fields.Loves,
-              Hates: update.fields.Hates,
-              Party: update.fields.Party
-            }
+            fields: update.fields
           }))
         })
       });
@@ -71,12 +73,15 @@ export default async function handler(req, res) {
 
     throw new Error('Method not allowed');
   } catch (error) {
+    console.error("Proxy Error:", error.message);
     return res.status(500).json({ 
+      success: false,
       error: error.message,
       details: {
         baseId,
         tableId,
-        viewId
+        viewId,
+        hasToken: !!token
       }
     });
   }
