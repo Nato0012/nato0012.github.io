@@ -9,10 +9,10 @@ export default async function handler(req, res) {
 
   try {
     // Verify all required environment variables
-    if (!token) throw new Error("Missing Airtable token");
-    if (!baseId) throw new Error("Missing base ID");
-    if (!tableId) throw new Error("Missing table ID");
-    
+    if (!token) throw new Error("Missing Airtable token in environment");
+    if (!baseId) throw new Error("Missing base ID in environment");
+    if (!tableId) throw new Error("Missing table ID in environment");
+
     // GET request - fetch records
     if (req.method === 'GET') {
       const url = new URL(`https://api.airtable.com/v0/${baseId}/${tableId}`);
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error?.message || `Airtable error: ${response.status}`);
+        throw new Error(error.error?.message || `Airtable API error: ${response.status}`);
       }
 
       const data = await response.json();
@@ -48,7 +48,14 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           records: updates.map(update => ({
             id: update.id,
-            fields: update.fields
+            fields: {
+              Name: update.fields.Name,
+              Type: update.fields.Type,
+              Relationship: update.fields.Relationship,
+              Loves: update.fields.Loves,
+              Hates: update.fields.Hates,
+              Party: update.fields.Party
+            }
           }))
         })
       });
@@ -64,14 +71,12 @@ export default async function handler(req, res) {
 
     throw new Error('Method not allowed');
   } catch (error) {
-    console.error("Airtable proxy error:", error);
     return res.status(500).json({ 
       error: error.message,
       details: {
         baseId,
         tableId,
-        viewId,
-        hasToken: !!token
+        viewId
       }
     });
   }
