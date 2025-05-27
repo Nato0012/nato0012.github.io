@@ -73,11 +73,9 @@
                     viewId: data.donorView,
                     token: data.donorToken
                 };
-                
-                console.log("Airtable configuration loaded");
             } catch (error) {
                 console.error("Error loading configuration:", error);
-                showModal("Configuration Error", "Failed to load configuration. Using fallback values.");
+                showModal("Configuration Error", "Failed to load configuration");
             }
         }
 
@@ -87,14 +85,13 @@
                 const response = await fetch('/api/airtableProxy');
                 const airtableData = await response.json();
                 
-                // Transform to expected format
                 donorData = {
                     donors: {
                         Democrat: [],
                         Republican: []
                     }
                 };
-                
+
                 airtableData.records.forEach(record => {
                     const party = record.fields.Party;
                     if (party === "Democrat" || party === "Republican") {
@@ -104,18 +101,15 @@
                             relationship: record.fields.Relationship || 0,
                             loves: record.fields.Loves || [],
                             hates: record.fields.Hates || [],
-                            image: record.fields.Image?.[0]?.url || "placeholder.jpg",
+                            image: record.fields.Image || "placeholder.jpg",
                             id: record.id
                         });
                     }
                 });
-                
-                console.log("Donors loaded successfully");
             } catch (error) {
                 console.error("Error fetching donors:", error);
-                showModal("Database Error", "Failed to load donor data. Using fallback data.");
                 
-                // Fallback data
+                // Fallback data with direct image paths
                 donorData = {
                     donors: {
                         Democrat: [
@@ -178,6 +172,8 @@
                         ]
                     }
                 };
+                
+                showModal("Warning", "Using fallback data. Error: " + error.message);
             }
         }
 
@@ -186,7 +182,6 @@
             try {
                 const updates = [];
                 
-                // Prepare Democrat updates
                 donorData.donors.Democrat.forEach(donor => {
                     updates.push({
                         id: donor.id,
@@ -201,7 +196,6 @@
                     });
                 });
                 
-                // Prepare Republican updates
                 donorData.donors.Republican.forEach(donor => {
                     updates.push({
                         id: donor.id,
@@ -216,7 +210,6 @@
                     });
                 });
                 
-                // Send updates to Airtable
                 const response = await fetch('/api/airtableProxy', {
                     method: 'POST',
                     headers: {
@@ -228,11 +221,16 @@
                 });
                 
                 if (!response.ok) throw new Error("Save failed");
-                console.log("Donors saved successfully");
             } catch (error) {
                 console.error("Error saving donors:", error);
-                showModal("Save Error", "Failed to save donor data.");
+                showModal("Save Error", "Failed to save donor data");
             }
+        }
+
+        // Helper function for multi-select fields
+        function arrayify(value) {
+            if (!value) return [];
+            return Array.isArray(value) ? value : [value];
         }
 
         // Switch between Democrat and Republican donors
@@ -240,7 +238,6 @@
             currentParty = party;
             renderDonors(party);
             
-            // Update tab styles
             document.querySelectorAll('.party-tab').forEach(tab => {
                 tab.classList.remove('active');
             });
@@ -258,7 +255,7 @@
                 const card = document.createElement('div');
                 card.className = 'donor-card';
                 card.innerHTML = `
-                    <img src="${donor.image}" alt="${donor.name}" class="donor-image" onerror="this.src='https://via.placeholder.com/300x200?text=Donor+Image'">
+                    <img src="/images/${donor.image}" alt="${donor.name}" class="donor-image" onerror="this.src='/images/placeholder.jpg'">
                     <div class="donor-info">
                         <div class="donor-name">${donor.name}</div>
                         <div class="donor-type">${donor.type}</div>
