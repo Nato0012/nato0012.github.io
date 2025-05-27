@@ -80,103 +80,116 @@
         }
 
         // Fetch donors from Airtable
-        async function fetchDonors() {
-            try {
-                const response = await fetch('/api/airtableProxy');
-                const airtableData = await response.json();
-                
-                donorData = {
-                    donors: {
-                        Democrat: [],
-                        Republican: []
-                    }
-                };
-
-                airtableData.records.forEach(record => {
-                    const party = record.fields.Party;
-                    if (party === "Democrat" || party === "Republican") {
-                        donorData.donors[party].push({
-                            name: record.fields.Name,
-                            type: record.fields.Type,
-                            relationship: record.fields.Relationship || 0,
-                            loves: record.fields.Loves || [],
-                            hates: record.fields.Hates || [],
-                            image: record.fields.Image || "placeholder.jpg",
-                            id: record.id
-                        });
-                    }
-                });
-            } catch (error) {
-                console.error("Error fetching donors:", error);
-                
-                // Fallback data with direct image paths
-                donorData = {
-                    donors: {
-                        Democrat: [
-                            {
-                                name: "Steven Hobbs",
-                                type: "Silicon Valley Executive",
-                                relationship: 75,
-                                loves: ["Social Programs", "Workers' Rights"],
-                                hates: ["Taxes"],
-                                image: "techtitan.jpg",
-                                id: "recDemo1"
-                            },
-                            {
-                                name: "Malik Williams",
-                                type: "Union Leader",
-                                relationship: 65,
-                                loves: ["Social Programs", "Workers' Rights"],
-                                hates: ["Immigration"],
-                                image: "unionworker.jpg",
-                                id: "recDemo2"
-                            },
-                            {
-                                name: "Julie Wreath",
-                                type: "Hollywood Star",
-                                relationship: 70,
-                                loves: ["Abortion", "Immigration"],
-                                hates: ["Guns"],
-                                image: "actress.jpg",
-                                id: "recDemo3"
-                            }
-                        ],
-                        Republican: [
-                            {
-                                name: "Jimmy Stonefeller",
-                                type: "Oil Tycoon",
-                                relationship: 80,
-                                loves: ["Guns", "Taxes"],
-                                hates: ["Workers' Rights"],
-                                image: "oiltycoon.jpg",
-                                id: "recRep1"
-                            },
-                            {
-                                name: "Richard Sterling",
-                                type: "Wall Street Broker",
-                                relationship: 85,
-                                loves: ["Immigration", "Taxes"],
-                                hates: ["Social Programs"],
-                                image: "wallstreettycoon.png",
-                                id: "recRep2"
-                            },
-                            {
-                                name: "Dwight Ikenburg",
-                                type: "Defense Contractor",
-                                relationship: 75,
-                                loves: ["Guns", "Immigration"],
-                                hates: ["Workers' Rights"],
-                                image: "defensecontractor.jpeg",
-                                id: "recRep3"
-                            }
-                        ]
-                    }
-                };
-                
-                showModal("Warning", "Using fallback data. Error: " + error.message);
+         async function fetchDonors() {
+          try {
+            console.log("Fetching donors...");
+            const response = await fetch('/api/airtableProxy');
+            const result = await response.json();
+            
+            if (!result.success) {
+              throw new Error(result.error || "Failed to fetch donors");
             }
+        
+            // Ensure we have records array
+            const records = result.records || [];
+            console.log(`Received ${records.length} records from Airtable`);
+        
+            // Transform data
+            donorData = {
+              donors: {
+                Democrat: [],
+                Republican: []
+              }
+            };
+        
+            records.forEach(record => {
+              if (!record.fields) return;
+              
+              const party = record.fields.Party;
+              if (party === "Democrat" || party === "Republican") {
+                donorData.donors[party].push({
+                  name: record.fields.Name || "Unknown",
+                  type: record.fields.Type || "",
+                  relationship: Number(record.fields.Relationship) || 0,
+                  loves: record.fields.Loves || [],
+                  hates: record.fields.Hates || [],
+                  image: record.fields.Image || "placeholder.jpg",
+                  id: record.id
+                });
+              }
+            });
+        
+            console.log("Processed donors:", donorData);
+          } catch (error) {
+            console.error("Fetch error:", error);
+            
+            // Enhanced fallback with all your donors
+            donorData = {
+              donors: {
+                Democrat: [
+                  {
+                    name: "Steven Hobbs",
+                    type: "Silicon Valley Executive",
+                    relationship: 75,
+                    loves: ["Social Programs", "Workers' Rights"],
+                    hates: ["Taxes"],
+                    image: "techtitan.jpg",
+                    id: "recDemo1"
+                  },
+                  {
+                    name: "Malik Williams",
+                    type: "Union Leader",
+                    relationship: 65,
+                    loves: ["Social Programs", "Workers' Rights"],
+                    hates: ["Immigration"],
+                    image: "unionworker.jpg",
+                    id: "recDemo2"
+                  },
+                  {
+                    name: "Julie Wreath",
+                    type: "Hollywood Star",
+                    relationship: 70,
+                    loves: ["Abortion", "Immigration"],
+                    hates: ["Guns"],
+                    image: "actress.jpg",
+                    id: "recDemo3"
+                  }
+                ],
+                Republican: [
+                  {
+                    name: "Jimmy Stonefeller",
+                    type: "Oil Tycoon",
+                    relationship: 80,
+                    loves: ["Guns", "Taxes"],
+                    hates: ["Workers' Rights"],
+                    image: "oiltycoon.jpg",
+                    id: "recRep1"
+                  },
+                  {
+                    name: "Richard Sterling",
+                    type: "Wall Street Broker",
+                    relationship: 85,
+                    loves: ["Immigration", "Taxes"],
+                    hates: ["Social Programs"],
+                    image: "wallstreettycoon.png",
+                    id: "recRep2"
+                  },
+                  {
+                    name: "Dwight Ikenburg",
+                    type: "Defense Contractor",
+                    relationship: 75,
+                    loves: ["Guns", "Immigration"],
+                    hates: ["Workers' Rights"],
+                    image: "defensecontractor.jpeg",
+                    id: "recRep3"
+                  }
+                ]
+              }
+            };
+            
+            showModal("Warning", `Using fallback data. Error: ${error.message}`);
+          }
         }
-
         // Save donors to Airtable
         async function saveDonors() {
             try {
