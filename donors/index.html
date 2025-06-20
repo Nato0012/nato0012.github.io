@@ -362,5 +362,18 @@
             document.getElementById('stamina').textContent = stamina;
         }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
+<script>
+  const client = new Appwrite.Client();
+
+  client
+    .setEndpoint('https://[YOUR_APPWRITE_URL]/v1')
+    .setProject('[PROJECT_ID]');
+
+  const account = new Appwrite.Account(client);
+
+  // Example: Get current user
+  account.get().then(console.log).catch(console.error);
+</script>
 </body>
 </html>
