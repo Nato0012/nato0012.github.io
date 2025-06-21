@@ -3,32 +3,31 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Appwrite Ping Test</title>
+  <title>Appwrite User Ping</title>
 </head>
 <body>
-  <h1>Appwrite Ping Test</h1>
-  <button onclick="sendPing()">Send a Ping</button>
+  <h1>Appwrite Connection Test</h1>
+  <button onclick="checkUser()">Send a Ping</button>
 
   <div id="result" style="margin-top: 20px; font-weight: bold;"></div>
 
   <script type="module">
-    import { Client } from 'https://esm.sh/appwrite';
+    import { Client, Account } from 'https://esm.sh/appwrite';
 
-    // Initialize Appwrite client
     const client = new Client()
-      .setEndpoint('https://nyc.cloud.appwrite.io/v1')  // Your endpoint
-      .setProject('68554b360036646491e2');              // Your project ID
+      .setEndpoint('https://nyc.cloud.appwrite.io/v1')
+      .setProject('68554b360036646491e2');
 
-    // Function that gets called when the button is clicked
-    window.sendPing = async function () {
+    const account = new Account(client);
+
+    window.checkUser = async function () {
       const resultEl = document.getElementById('result');
       try {
-        // Ping the Appwrite server's health endpoint
-        await client.call('get', '/health');
-        resultEl.textContent = '✅ Ping successful! Appwrite is reachable.';
+        const user = await account.get();
+        resultEl.textContent = `✅ Connected as ${user.email}`;
         resultEl.style.color = 'green';
-      } catch (error) {
-        resultEl.textContent = '❌ Ping failed. Check your endpoint or project ID.';
+      } catch (err) {
+        resultEl.textContent = '❌ Not connected or not logged in.';
         resultEl.style.color = 'red';
       }
     };
