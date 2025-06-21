@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Appwrite Login + Ping</title>
   <style>
     body {
@@ -9,14 +9,9 @@
       max-width: 500px;
       margin: 40px auto;
     }
-    input {
-      display: block;
-      margin: 8px 0;
-      padding: 8px;
-      width: 100%;
-    }
     button {
-      margin-top: 10px;
+      display: block;
+      margin: 12px 0;
       padding: 10px 15px;
       font-size: 16px;
     }
@@ -27,52 +22,31 @@
   </style>
 </head>
 <body>
-  <h1>Appwrite Test</h1>
+  <h1>Appwrite Test Page</h1>
 
-  <h2>Sign Up</h2>
-  <input id="signup-email" placeholder="Email" />
-  <input id="signup-password" type="password" placeholder="Password" />
-  <button onclick="signup()">Sign Up</button>
+  <button onclick="login()">🔐 Log In (Hardcoded)</button>
+  <button onclick="ping()">📡 Send a Ping</button>
 
-  <h2>Log In</h2>
-  <input id="login-email" placeholder="Email" />
-  <input id="login-password" type="password" placeholder="Password" />
-  <button onclick="login()">Log In</button>
-
-  <h2>Check Connection</h2>
-  <button onclick="ping()">Send a Ping</button>
   <div id="result"></div>
 
   <script type="module">
     import { Client, Account } from 'https://esm.sh/appwrite';
 
     const client = new Client()
-      .setEndpoint('https://nyc.cloud.appwrite.io/v1') // Your endpoint
-      .setProject('68554b360036646491e2');             // Your project ID
+      .setEndpoint('https://nyc.cloud.appwrite.io/v1')                // ✅ Your Appwrite endpoint
+      .setProject('68554b360036646491e2');                            // ✅ Your Project ID
 
     const account = new Account(client);
 
-    window.signup = async () => {
-      const email = document.getElementById('signup-email').value;
-      const password = document.getElementById('signup-password').value;
-
-      try {
-        await account.create('unique()', email, password);
-        alert('✅ Signup successful! You can now log in.');
-      } catch (error) {
-        alert('❌ Signup failed: ' + error.message);
-      }
-    };
-
     window.login = async () => {
-      const email = document.getElementById('login-email').value;
-      const password = document.getElementById('login-password').value;
+      const email = 'your@email.com';         // 🔁 Replace with your email
+      const password = 'yourPassword123';     // 🔁 Replace with your password
 
       try {
         await account.createEmailSession(email, password);
         alert('✅ Login successful!');
-      } catch (error) {
-        alert('❌ Login failed: ' + error.message);
+      } catch (err) {
+        alert('❌ Login failed: ' + err.message);
       }
     };
 
@@ -82,7 +56,7 @@
         const user = await account.get();
         result.textContent = `✅ Connected as ${user.email}`;
         result.style.color = 'green';
-      } catch (error) {
+      } catch (err) {
         result.textContent = '❌ Not connected or not logged in.';
         result.style.color = 'red';
       }
