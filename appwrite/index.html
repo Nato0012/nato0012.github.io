@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Appwrite Test</title>
+</head>
+<body>
+  <h1>Hello Appwrite!</h1>
+
+  <script type="module">
+    import { Client, Account } from 'https://esm.sh/appwrite';
+
+    const client = new Client();
+
+    client
+      .setEndpoint('https://nyc.cloud.appwrite.io/v1')  // Your endpoint
+      .setProject('68554b360036646491e2');              // Your project ID
+
+    const account = new Account(client);
+
+    // Try to get the currently logged in user
+    account.get()
+      .then((user) => {
+        showBanner(`✅ Connected as ${user.name || user.email}`);
+      })
+      .catch((err) => {
+        showBanner('❌ Not connected to Appwrite or not logged in');
+      });
+
+    function showBanner(message) {
+      const banner = document.createElement('div');
+      banner.textContent = message;
+      banner.style.position = 'fixed';
+      banner.style.top = '0';
+      banner.style.left = '0';
+      banner.style.right = '0';
+      banner.style.background = '#333';
+      banner.style.color = 'white';
+      banner.style.padding = '10px';
+      banner.style.textAlign = 'center';
+      banner.style.zIndex = '9999';
+      document.body.appendChild(banner);
+
+      setTimeout(() => {
+        banner.remove();
+      }, 5000);
+    }
+  </script>
+</body>
+</html>
