@@ -3,272 +3,256 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Presidency Awaits - Donors</title>
+    <title>Donor Debug Mode</title>
     <link rel="stylesheet" href="/global.css?v=1.1">
     <link rel="stylesheet" href="/donors/donors.css?v=1.1">
-    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=3">
-    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=3">
-    <link rel="shortcut icon" href="/favicon-32x32.png?v=3" type="image/png">
+    <style>
+        #debug-console {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 200px;
+            background: #1e1e1e;
+            color: #fff;
+            padding: 10px;
+            overflow-y: auto;
+            font-family: monospace;
+            z-index: 1000;
+            border-top: 2px solid #444;
+        }
+        .debug-entry {
+            margin-bottom: 5px;
+            white-space: pre-wrap;
+        }
+        .debug-error {
+            color: #ff6b6b;
+        }
+        .debug-success {
+            color: #6bff6b;
+        }
+        #debug-toggle {
+            position: fixed;
+            bottom: 210px;
+            right: 10px;
+            z-index: 1001;
+            background: #333;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
     <div class="stamina-display">
         Stamina: <span id="stamina">10</span>
     </div>
 
-    <h1>Political Donor Management</h1>
+    <h1>Political Donor Management - DEBUG MODE</h1>
     
     <div class="party-tabs">
-        <div class="party-tab active" onclick="switchParty('Democrat')">Democrat Donors</div>
-        <div class="party-tab" onclick="switchParty('Republican')">Republican Donors</div>
+        <div class="party-tab active" onclick="window.switchParty('Democrat')">Democrat Donors</div>
+        <div class="party-tab" onclick="window.switchParty('Republican')">Republican Donors</div>
     </div>
     
     <div id="donor-container" class="donor-grid">
-        <!-- Donor cards will be inserted here by JavaScript -->
-    </div>
-    
-    <div id="result-modal" class="modal">
-        <div class="modal-content">
-            <h2 id="modal-title">Result</h2>
-            <p id="modal-message">This is a message</p>
-            <button onclick="closeModal()">Close</button>
+        <div class="loading-message">
+            Loading donor data...
+            <div id="loading-details"></div>
         </div>
     </div>
 
-    <script>
-        // Configuration
-        let AIRTABLE_CONFIG = {
-            baseId: '',
-            tableId: '',
-            viewId: '',
-            token: ''
-        };
+    <button id="debug-toggle" onclick="toggleDebug()">Hide Debug</button>
+    <div id="debug-console">
+        <div class="debug-entry">Debug console initialized...</div>
+    </div>
 
-        // Player state
-        let currentParty = "Democrat";
-        let stamina = 10;
-        let donorData = {
-            "donors": {
-                "Democrat": [],
-                "Republican": []
-            }
-        };
+    <script type="module">
+        // Debugging utilities
+        function debugLog(message, type = 'info') {
+            const consoleElem = document.getElementById('debug-console');
+            const entry = document.createElement('div');
+            entry.className = `debug-entry debug-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            consoleElem.appendChild(entry);
+            consoleElem.scrollTop = consoleElem.scrollHeight;
+            console.log(`[DEBUG] ${message}`);
+        }
 
-        // Initialize the page
-        document.addEventListener('DOMContentLoaded', async function() {
-            await fetchEnvVars();
-            await fetchDonors();
-            renderDonors(currentParty);
-            updateStaminaDisplay();
-        });
+        function updateLoadingMessage(message) {
+            const elem = document.getElementById('loading-details');
+            if (elem) elem.textContent = message;
+        }
 
-        // Fetch environment variables from Vercel
-        async function fetchEnvVars() {
-            try {
-                const response = await fetch('/api/getEnv');
-                const data = await response.json();
-                
-                AIRTABLE_CONFIG = {
-                    baseId: data.donorId,
-                    tableId: data.donorTable,
-                    viewId: data.donorView,
-                    token: data.donorToken
-                };
-            } catch (error) {
-                console.error("Error loading configuration:", error);
-                showModal("Configuration Error", "Failed to load configuration");
+        function toggleDebug() {
+            const consoleElem = document.getElementById('debug-console');
+            const button = document.getElementById('debug-toggle');
+            if (consoleElem.style.display === 'none') {
+                consoleElem.style.display = 'block';
+                button.textContent = 'Hide Debug';
+            } else {
+                consoleElem.style.display = 'none';
+                button.textContent = 'Show Debug';
             }
         }
 
-        // Fetch donors from Airtable
-         async function fetchDonors() {
-          try {
-            console.log("Fetching donors...");
-            const response = await fetch('/api/airtableProxy');
-            const result = await response.json();
-            
-            if (!result.success) {
-              throw new Error(result.error || "Failed to fetch donors");
-            }
-        
-            // Ensure we have records array
-            const records = result.records || [];
-            console.log(`Received ${records.length} records from Airtable`);
-        
-            // Transform data
-            donorData = {
-              donors: {
+        // Initialize Appwrite
+        debugLog("Initializing Appwrite client...");
+        debugLog(`Endpoint: ${import.meta.env.VITE_APPWRITE_ENDPOINT}`);
+        debugLog(`Project ID: ${import.meta.env.VITE_APPWRITE_PROJECT_ID}`);
+
+        import { Client, Databases } from 'https://cdn.jsdelivr.net/npm/appwrite@13.0.1/+esm';
+
+        const client = new Client()
+            .setEndpoint(import.meta.env.VITE_APPWRITE_ENDPOINT)
+            .setProject(import.meta.env.VITE_APPWRITE_PROJECT_ID);
+
+        const databases = new Databases(client);
+
+        // State management
+        const state = {
+            currentParty: "Democrat",
+            stamina: 10,
+            donors: {
                 Democrat: [],
                 Republican: []
-              }
-            };
-        
-            records.forEach(record => {
-              if (!record.fields) return;
-              
-              const party = record.fields.Party;
-              if (party === "Democrat" || party === "Republican") {
-                donorData.donors[party].push({
-                  name: record.fields.Name || "Unknown",
-                  type: record.fields.Type || "",
-                  relationship: Number(record.fields.Relationship) || 0,
-                  loves: record.fields.Loves || [],
-                  hates: record.fields.Hates || [],
-                  image: record.fields.Image || "placeholder.jpg",
-                  id: record.id
-                });
-              }
-            });
-        
-            console.log("Processed donors:", donorData);
-          } catch (error) {
-            console.error("Fetch error:", error);
+            }
+        };
+
+        // Connection test
+        async function testConnection() {
+            updateLoadingMessage("Testing connection to Appwrite...");
+            debugLog("Testing Appwrite connection");
             
-            // Enhanced fallback with all your donors
-            donorData = {
-              donors: {
-                Democrat: [
-                  {
-                    name: "Steven Hobbs",
-                    type: "Silicon Valley Executive",
-                    relationship: 75,
-                    loves: ["Social Programs", "Workers' Rights"],
-                    hates: ["Taxes"],
-                    image: "techtitan.jpg",
-                    id: "recDemo1"
-                  },
-                  {
-                    name: "Malik Williams",
-                    type: "Union Leader",
-                    relationship: 65,
-                    loves: ["Social Programs", "Workers' Rights"],
-                    hates: ["Immigration"],
-                    image: "unionworker.jpg",
-                    id: "recDemo2"
-                  },
-                  {
-                    name: "Julie Wreath",
-                    type: "Hollywood Star",
-                    relationship: 70,
-                    loves: ["Abortion", "Immigration"],
-                    hates: ["Guns"],
-                    image: "actress.jpg",
-                    id: "recDemo3"
-                  }
-                ],
-                Republican: [
-                  {
-                    name: "Jimmy Stonefeller",
-                    type: "Oil Tycoon",
-                    relationship: 80,
-                    loves: ["Guns", "Taxes"],
-                    hates: ["Workers' Rights"],
-                    image: "oiltycoon.jpg",
-                    id: "recRep1"
-                  },
-                  {
-                    name: "Richard Sterling",
-                    type: "Wall Street Broker",
-                    relationship: 85,
-                    loves: ["Immigration", "Taxes"],
-                    hates: ["Social Programs"],
-                    image: "wallstreettycoon.png",
-                    id: "recRep2"
-                  },
-                  {
-                    name: "Dwight Ikenburg",
-                    type: "Defense Contractor",
-                    relationship: 75,
-                    loves: ["Guns", "Immigration"],
-                    hates: ["Workers' Rights"],
-                    image: "defensecontractor.jpeg",
-                    id: "recRep3"
-                  }
-                ]
-              }
-            };
-            
-            showModal("Warning", `Using fallback data. Error: ${error.message}`);
-          }
-        }
-        // Save donors to Airtable
-        async function saveDonors() {
             try {
-                const updates = [];
-                
-                donorData.donors.Democrat.forEach(donor => {
-                    updates.push({
-                        id: donor.id,
-                        fields: {
-                            Name: donor.name,
-                            Type: donor.type,
-                            Relationship: donor.relationship,
-                            Loves: donor.loves,
-                            Hates: donor.hates,
-                            Party: "Democrat"
-                        }
-                    });
-                });
-                
-                donorData.donors.Republican.forEach(donor => {
-                    updates.push({
-                        id: donor.id,
-                        fields: {
-                            Name: donor.name,
-                            Type: donor.type,
-                            Relationship: donor.relationship,
-                            Loves: donor.loves,
-                            Hates: donor.hates,
-                            Party: "Republican"
-                        }
-                    });
-                });
-                
-                const response = await fetch('/api/airtableProxy', {
-                    method: 'POST',
+                const healthResponse = await fetch(`${import.meta.env.VITE_APPWRITE_ENDPOINT}/health`, {
                     headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        updates: updates
-                    })
+                        'X-Appwrite-Project': import.meta.env.VITE_APPWRITE_PROJECT_ID
+                    }
                 });
                 
-                if (!response.ok) throw new Error("Save failed");
+                debugLog(`Health check status: ${healthResponse.status}`);
+                
+                if (!healthResponse.ok) {
+                    throw new Error(`Health check failed with status ${healthResponse.status}`);
+                }
+                
+                const healthData = await healthResponse.json();
+                debugLog("Health check response:", healthData);
+                updateLoadingMessage("Connection successful, loading donors...");
+                return true;
             } catch (error) {
-                console.error("Error saving donors:", error);
-                showModal("Save Error", "Failed to save donor data");
+                debugLog(`Connection failed: ${error.message}`, 'error');
+                updateLoadingMessage(`Connection failed: ${error.message}`);
+                return false;
             }
         }
 
-        // Helper function for multi-select fields
-        function arrayify(value) {
-            if (!value) return [];
-            return Array.isArray(value) ? value : [value];
-        }
-
-        // Switch between Democrat and Republican donors
-        function switchParty(party) {
-            currentParty = party;
-            renderDonors(party);
+        // Fetch donors with detailed debugging
+        async function fetchDonors() {
+            debugLog("Starting donor fetch process");
+            updateLoadingMessage("Preparing to fetch donor data...");
             
-            document.querySelectorAll('.party-tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            document.querySelector(`.party-tab:nth-child(${party === 'Democrat' ? 1 : 2})`).classList.add('active');
+            // Test connection first
+            const isConnected = await testConnection();
+            if (!isConnected) {
+                debugLog("Aborting donor fetch due to connection issues", "error");
+                return;
+            }
+
+            debugLog("Fetching documents from collection...");
+            updateLoadingMessage("Fetching donor records from database...");
+            
+            try {
+                const startTime = Date.now();
+                const response = await databases.listDocuments('PoliticalDonors', 'Donors');
+                const fetchDuration = Date.now() - startTime;
+                
+                debugLog(`Fetch completed in ${fetchDuration}ms`);
+                debugLog(`Received ${response.documents.length} documents`);
+                updateLoadingMessage(`Found ${response.documents.length} donor records`);
+                
+                if (response.documents.length === 0) {
+                    debugLog("No documents found in collection", "error");
+                    updateLoadingMessage("No donor records found in database");
+                    return;
+                }
+
+                debugLog("Processing donor documents...");
+                updateLoadingMessage("Processing donor data...");
+                
+                state.donors = {
+                    Democrat: [],
+                    Republican: []
+                };
+
+                response.documents.forEach((doc, index) => {
+                    debugLog(`Processing document #${index + 1}: ${doc.$id}`);
+                    
+                    const party = doc.party;
+                    if (!party) {
+                        debugLog(`Document ${doc.$id} missing party field`, "error");
+                        return;
+                    }
+
+                    if (party === "Democrat" || party === "Republican") {
+                        state.donors[party].push({
+                            name: doc.name || "Unknown",
+                            type: doc.type || "",
+                            relationship: Number(doc.relationship) || 0,
+                            loves: doc.loves || [],
+                            hates: doc.hates || [],
+                            image: doc.image || "placeholder.jpg",
+                            id: doc.$id
+                        });
+                        debugLog(`Added ${party} donor: ${doc.name || 'Unnamed'} (${doc.$id})`);
+                    } else {
+                        debugLog(`Skipping document with unknown party: ${party}`, "error");
+                    }
+                });
+
+                debugLog(`Processed ${state.donors.Democrat.length} Democrat donors`);
+                debugLog(`Processed ${state.donors.Republican.length} Republican donors`);
+                updateLoadingMessage(`Loaded ${state.donors.Democrat.length + state.donors.Republican.length} donors`);
+
+                if (state.donors.Democrat.length === 0 && state.donors.Republican.length === 0) {
+                    debugLog("No valid donors found for either party", "error");
+                    updateLoadingMessage("No valid donor records found");
+                }
+
+            } catch (error) {
+                debugLog(`Error fetching donors: ${error.message}`, "error");
+                debugLog(`Error stack: ${error.stack}`, "error");
+                updateLoadingMessage(`Error loading data: ${error.message}`);
+            }
         }
 
-        // Render donor cards for the selected party
+        // Render donors with debug info
         function renderDonors(party) {
+            debugLog(`Rendering ${party} donors...`);
+            updateLoadingMessage(`Preparing ${party} donor display...`);
+            
             const container = document.getElementById('donor-container');
             container.innerHTML = '';
+
+            if (state.donors[party].length === 0) {
+                debugLog(`No ${party} donors to display`, "error");
+                container.innerHTML = `<div class="no-donors">No ${party} donors found</div>`;
+                updateLoadingMessage(`No ${party} donors found in data`);
+                return;
+            }
+
+            debugLog(`Displaying ${state.donors[party].length} ${party} donors`);
             
-            donorData.donors[party].forEach(donor => {
+            state.donors[party].forEach(donor => {
                 const hourly = Math.floor(500 * (1 + (donor.relationship / 10)));
-                
                 const card = document.createElement('div');
                 card.className = 'donor-card';
                 card.innerHTML = `
-                    <img src="/images/${donor.image}" alt="${donor.name}" class="donor-image" onerror="this.src='/images/placeholder.jpg'">
+                    <img src="/images/${donor.image}" alt="${donor.name}" 
+                         class="donor-image" 
+                         onerror="console.error('Failed to load image: ${donor.image}'); this.src='/images/placeholder.jpg'">
                     <div class="donor-info">
                         <div class="donor-name">${donor.name}</div>
                         <div class="donor-type">${donor.type}</div>
@@ -281,99 +265,47 @@
                             <strong>Hates:</strong> ${donor.hates.join(', ')}
                         </div>
                         <div class="donor-buttons">
-                            <button class="btn btn-court" onclick="courtDonor('${party}', '${donor.name}')">Court (-1 Stamina)</button>
-                            <button class="btn btn-attack" onclick="attackDonor('${party}', '${donor.name}')">Attack (-2 Stamina)</button>
+                            <button class="btn btn-court" onclick="window.courtDonor('${party}', '${donor.id}')">
+                                Court (-1 Stamina)
+                            </button>
+                            <button class="btn btn-attack" onclick="window.attackDonor('${party}', '${donor.id}')">
+                                Attack (-2 Stamina)
+                            </button>
                         </div>
                     </div>
                 `;
-                
                 container.appendChild(card);
             });
+            
+            updateLoadingMessage(`Displaying ${state.donors[party].length} ${party} donors`);
+            debugLog(`Finished rendering ${party} donors`, "success");
         }
 
-        // Court a donor (improve relationship)
-        async function courtDonor(party, donorName) {
-            if (stamina < 1) {
-                showModal("Not Enough Stamina", "❌ You don't have enough stamina! (Need 1)");
-                return;
-            }
-            
-            const donor = donorData.donors[party].find(d => d.name === donorName);
-            const successRate = 50 + Math.floor(donor.relationship / 2);
-            const roll = Math.floor(Math.random() * 100) + 1;
-            
-            if (roll <= successRate) {
-                const gain = 10;
-                donor.relationship = Math.min(100, donor.relationship + gain);
-                stamina -= 1;
-                updateStaminaDisplay();
-                await saveDonors();
-                showModal("Success!", `🎩 Success! ${donor.name}'s relationship +${gain}`);
-            } else {
-                stamina -= 1;
-                updateStaminaDisplay();
-                showModal("Rejected", `💔 ${donor.name} rejected your advances!`);
-            }
-            
-            renderDonors(currentParty);
+        // Initialize application
+        async function init() {
+            debugLog("Initializing application...");
+            await fetchDonors();
+            renderDonors(state.currentParty);
+            updateStaminaDisplay();
+            debugLog("Application initialization complete");
         }
 
-        // Attack a donor (damage relationship)
-        async function attackDonor(party, donorName) {
-            if (stamina < 2) {
-                showModal("Not Enough Stamina", "❌ You don't have enough stamina! (Need 2)");
-                return;
-            }
-            
-            const donor = donorData.donors[party].find(d => d.name === donorName);
-            const successRate = 50;
-            const roll = Math.floor(Math.random() * 100) + 1;
-            
-            if (roll <= successRate) {
-                const loss = 5;
-                donor.relationship = Math.max(0, donor.relationship - loss);
-                stamina -= 2;
-                updateStaminaDisplay();
-                await saveDonors();
-                showModal("Success!", `💥 Success! ${donor.name}'s relationship -${loss}`);
-            } else {
-                stamina -= 2;
-                updateStaminaDisplay();
-                showModal("Resisted", `🛡️ ${donor.name} resisted your attack!`);
-            }
-            
-            renderDonors(currentParty);
-        }
+        // Make functions available globally
+        window.switchParty = function(party) {
+            debugLog(`Switching to ${party} view`);
+            state.currentParty = party;
+            renderDonors(party);
+            document.querySelectorAll('.party-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelector(`.party-tab:nth-child(${party === 'Democrat' ? 1 : 2})`).classList.add('active');
+        };
 
-        // Show modal with result message
-        function showModal(title, message) {
-            document.getElementById('modal-title').textContent = title;
-            document.getElementById('modal-message').innerHTML = message;
-            document.getElementById('result-modal').style.display = 'flex';
-        }
+        window.updateStaminaDisplay = function() {
+            document.getElementById('stamina').textContent = state.stamina;
+        };
 
-        // Close modal
-        function closeModal() {
-            document.getElementById('result-modal').style.display = 'none';
-        }
-
-        // Update stamina display
-        function updateStaminaDisplay() {
-            document.getElementById('stamina').textContent = stamina;
-        }
+        document.addEventListener('DOMContentLoaded', init);
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
-<script>
-  const client = new Appwrite.Client();
-
-  client
-    .setEndpoint('https://[YOUR_APPWRITE_URL]/v1')
-    .setProject('[PROJECT_ID]');
-
-  const account = new Appwrite.Account(client);
-
-  // Example: Get current user
-  account.get().then(console.log).catch(console.error);
-</script>
 </body>
 </html>
